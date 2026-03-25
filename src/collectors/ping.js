@@ -1,3 +1,5 @@
+const RingBuffer = require('../util/ringbuffer');
+
 const PING_COUNT = 3;
 
 class PingCollector {
@@ -8,8 +10,8 @@ class PingCollector {
     this.state  = state;
     this.target = target || '1.1.1.1';
     this.timer  = null;
-    this.history = []; // {ts, rtt, loss}
-    this.MAX_HISTORY = 60;
+    // M-3: Use RingBuffer instead of array push/shift to avoid O(n) shifts.
+    this.history = new RingBuffer(60);
   }
 
   async tick() {
@@ -47,14 +49,13 @@ class PingCollector {
 
     const point = { ts: Date.now(), rtt, loss };
     this.history.push(point);
-    if (this.history.length > this.MAX_HISTORY) this.history.shift();
 
     this.io.emit('ping:update', { target: this.target, rtt, loss, ts: point.ts });
     this.state.lastPingTs = Date.now();
   }
 
   getHistory() {
-    return { target: this.target, history: this.history };
+    return { target: this.target, history: this.history.toArray() };
   }
 
   start() {
@@ -64,7 +65,8 @@ class PingCollector {
     run();
     this.timer = setInterval(run, this.pollMs);
     this.ros.on('close',     () => { if (this.timer) { clearInterval(this.timer); this.timer = null; } });
-    this.ros.on('connected', () => { this.timer = this.timer || setInterval(run, this.pollMs); run(); });
+    // H-2: Always clear the previous timer before creating a new one to prevent duplicates.
+    this.ros.on('connected', () => { clearInterval(this.timer); this.timer = setInterval(run, this.pollMs); run(); });
   }
 }
 
