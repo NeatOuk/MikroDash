@@ -7,7 +7,7 @@
  *   by ROS version and is unreliable. Every known working implementation uses
  *   write() + =once= on a 1-second interval. This is the correct approach.
  */
-const RingBuffer = require('../util/ringbuffer');
+const RingBuffer = require("../util/ringbuffer");
 
 const POLL_MS = 1000; // 1 second
 // RouterOS interface names are short in practice; cap this to reject malformed input early.
@@ -16,13 +16,23 @@ const MAX_INTERFACE_NAME_LENGTH = 128;
 function parseBps(val) {
   // RouterOS API returns raw integer strings via binary API (e.g. "27800")
   // but format strings in terminal output ("27.8kbps") — just in case, handle both.
-  if (!val || val === '0') return 0;
+  if (!val || val === "0") return 0;
   var s = String(val);
-  if (s.endsWith('kbps') || s.endsWith('Kbps')) return parseFloat(s) * 1000;
-  if (s.endsWith('Mbps') || s.endsWith('mbps')) return parseFloat(s) * 1_000_000;
-  if (s.endsWith('Gbps') || s.endsWith('gbps')) return parseFloat(s) * 1_000_000_000;
-  if (s.endsWith('bps')) return parseFloat(s);
-  return parseInt(s, 10) || 0;
+  if (s.endsWith("kbps") || s.endsWith("Kbps")) return parseFloat(s) * 1000;
+  if (s.endsWith("Mbps") || s.endsWith("mbps"))
+    return parseFloat(s) * 1_000_000;
+  if (s.endsWith("Gbps") || s.endsWith("gbps"))
+    return parseFloat(s) * 1_000_000_000;
+  if (s.endsWith("bps")) return parseFloat(s);
+  const n = parseInt(s, 10);
+  // M-1: Warn once in debug mode when the value cannot be parsed as a number.
+  if (isNaN(n) && process.env.ROS_DEBUG === "true") {
+    console.warn(
+      "[traffic] parseBps: unexpected non-numeric value:",
+      JSON.stringify(s),
+    );
+  }
+  return isNaN(n) ? 0 : n;
 }
 
 function bpsToMbps(bps) {
@@ -31,29 +41,32 @@ function bpsToMbps(bps) {
 
 class TrafficCollector {
   constructor({ ros, io, defaultIf, historyMinutes, state }) {
-    this.ros       = ros;
-    this.io        = io;
+    this.ros = ros;
+    this.io = io;
     this.defaultIf = defaultIf;
-    this.state     = state;
+    this.state = state;
     this.maxPoints = Math.max(60, historyMinutes * 60);
-    this.hist          = new Map();   // ifName -> RingBuffer
-    this.subscriptions = new Map();   // socketId -> ifName
-    this.timers        = new Map();   // ifName -> intervalId
-    this.availableIfs  = new Set();
-    this._loggedErrs   = new Set();   // ifNames that have logged an error
+    this.hist = new Map(); // ifName -> RingBuffer
+    this.subscriptions = new Map(); // socketId -> ifName
+    this.timers = new Map(); // ifName -> intervalId
+    this.availableIfs = new Set();
+    this._loggedErrs = new Set(); // ifNames that have logged an error
   }
 
   _ensureHistory(ifName) {
-    if (!this.hist.has(ifName)) this.hist.set(ifName, new RingBuffer(this.maxPoints));
+    if (!this.hist.has(ifName))
+      this.hist.set(ifName, new RingBuffer(this.maxPoints));
   }
 
   setAvailableInterfaces(interfaces) {
-    const names = (interfaces || []).map(i => typeof i === 'string' ? i : i && i.name).filter(Boolean);
+    const names = (interfaces || [])
+      .map((i) => (typeof i === "string" ? i : i && i.name))
+      .filter(Boolean);
     this.availableIfs = new Set(names);
   }
 
   _normalizeIfName(ifName) {
-    if (typeof ifName !== 'string') return null;
+    if (typeof ifName !== "string") return null;
     const trimmed = ifName.trim();
     if (!trimmed || trimmed.length > MAX_INTERFACE_NAME_LENGTH) return null;
     if (/[\r\n\0]/.test(trimmed)) return null;
@@ -66,7 +79,7 @@ class TrafficCollector {
     if (!timer) return;
     clearInterval(timer);
     this.timers.delete(ifName);
-    console.log('[traffic] stopped polling', ifName);
+    console.log("[traffic] stopped polling", ifName);
   }
 
   _pruneUnusedPolls() {
@@ -82,20 +95,20 @@ class TrafficCollector {
     this.subscriptions.set(socket.id, this.defaultIf);
 
     // Client changed interface selection
-    socket.on('traffic:select', (payload) => {
+    socket.on("traffic:select", (payload) => {
       const nextIf = this._normalizeIfName(payload && payload.ifName);
       if (!nextIf) return;
       this.subscriptions.set(socket.id, nextIf);
       this._ensureHistory(nextIf);
       this._startPoll(nextIf);
       this._pruneUnusedPolls();
-      socket.emit('traffic:history', {
+      socket.emit("traffic:history", {
         ifName: nextIf,
         points: this.hist.get(nextIf).toArray(),
       });
     });
 
-    socket.on('disconnect', () => {
+    socket.on("disconnect", () => {
       this.subscriptions.delete(socket.id);
       this._pruneUnusedPolls();
     });
@@ -105,51 +118,59 @@ class TrafficCollector {
     if (this.timers.has(ifName)) return; // already polling
     if (!this.ros.connected) return;
 
-    console.log('[traffic] polling', ifName, 'every', POLL_MS, 'ms');
+    console.log("[traffic] polling", ifName, "every", POLL_MS, "ms");
 
     const timer = setInterval(async () => {
       if (!this.ros.connected) return;
       try {
-        const rows = await this.ros.write(
-          '/interface/monitor-traffic',
-          [`=interface=${ifName}`, '=once=']
-        );
+        const rows = await this.ros.write("/interface/monitor-traffic", [
+          `=interface=${ifName}`,
+          "=once=",
+        ]);
         if (!rows || !rows.length) return;
         const data = rows[0];
 
-        const rxBps = parseBps(data['rx-bits-per-second']);
-        const txBps = parseBps(data['tx-bits-per-second']);
-        const running  = data.running  !== 'false' && data.running  !== false;
-        const disabled = data.disabled === 'true'  || data.disabled === true;
+        const rxBps = parseBps(data["rx-bits-per-second"]);
+        const txBps = parseBps(data["tx-bits-per-second"]);
+        const running = data.running !== "false" && data.running !== false;
+        const disabled = data.disabled === "true" || data.disabled === true;
 
-        const now    = Date.now();
+        const now = Date.now();
         const sample = {
-          ifName, ts: now,
+          ifName,
+          ts: now,
           rx_mbps: bpsToMbps(rxBps),
           tx_mbps: bpsToMbps(txBps),
-          running, disabled,
+          running,
+          disabled,
         };
 
         this._ensureHistory(ifName);
-        this.hist.get(ifName).push({ ts: now, rx_mbps: sample.rx_mbps, tx_mbps: sample.tx_mbps });
+        this.hist
+          .get(ifName)
+          .push({ ts: now, rx_mbps: sample.rx_mbps, tx_mbps: sample.tx_mbps });
 
         // Push to subscribed sockets
         for (const [sid, subIf] of this.subscriptions.entries()) {
-          if (subIf === ifName) this.io.to(sid).emit('traffic:update', sample);
+          if (subIf === ifName) this.io.to(sid).emit("traffic:update", sample);
         }
 
         // WAN status for default interface
         if (ifName === this.defaultIf) {
-          this.io.emit('wan:status', { ifName, ts: now, running, disabled });
+          this.io.emit("wan:status", { ifName, ts: now, running, disabled });
         }
 
-        this.state.lastTrafficTs  = now;
+        this.state.lastTrafficTs = now;
         this.state.lastTrafficErr = null;
-
       } catch (e) {
         this.state.lastTrafficErr = e && e.message ? e.message : String(e);
         if (!this._loggedErrs.has(ifName)) {
-          console.error('[traffic] poll error on', ifName, ':', this.state.lastTrafficErr);
+          console.error(
+            "[traffic] poll error on",
+            ifName,
+            ":",
+            this.state.lastTrafficErr,
+          );
           this._loggedErrs.add(ifName);
         }
       }
@@ -168,8 +189,8 @@ class TrafficCollector {
     this._ensureHistory(this.defaultIf);
     this._startPoll(this.defaultIf);
 
-    this.ros.on('connected', () => {
-      console.log('[traffic] reconnected — restarting polls');
+    this.ros.on("connected", () => {
+      console.log("[traffic] reconnected — restarting polls");
       this._stopAll();
       this._ensureHistory(this.defaultIf);
       this._startPoll(this.defaultIf);
@@ -180,7 +201,7 @@ class TrafficCollector {
       }
     });
 
-    this.ros.on('close', () => this._stopAll());
+    this.ros.on("close", () => this._stopAll());
   }
 }
 
