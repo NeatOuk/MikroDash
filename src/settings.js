@@ -142,6 +142,20 @@ function load() {
   // Seed from env if settings file has no credentials yet
   if (!merged.routerPass) merged.routerPass = process.env.ROUTER_PASS || "";
 
+  // Env vars always win for connection fields when explicitly set
+  if (process.env.ROUTER_HOST) merged.routerHost = process.env.ROUTER_HOST;
+  if (process.env.ROUTER_PORT)
+    merged.routerPort = parseInt(process.env.ROUTER_PORT, 10);
+  if (process.env.ROUTER_TLS)
+    merged.routerTls = process.env.ROUTER_TLS.toLowerCase() === "true";
+  if (process.env.ROUTER_TLS_INSECURE)
+    merged.routerTlsInsecure =
+      process.env.ROUTER_TLS_INSECURE.toLowerCase() === "true";
+  if (process.env.ROUTER_USER) merged.routerUser = process.env.ROUTER_USER;
+  if (process.env.ROUTER_PASS) merged.routerPass = process.env.ROUTER_PASS;
+  if (process.env.DEFAULT_IF) merged.defaultIf = process.env.DEFAULT_IF;
+  if (process.env.PING_TARGET) merged.pingTarget = process.env.PING_TARGET;
+
   _cache = merged;
   return _cache;
 }
