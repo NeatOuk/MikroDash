@@ -9,116 +9,118 @@
  * for production credential storage).
  */
 
-'use strict';
-const fs     = require('fs');
-const path   = require('path');
-const crypto = require('crypto');
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 
-const DATA_DIR      = process.env.DATA_DIR || '/data';
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const DATA_DIR = process.env.DATA_DIR || "/data";
+const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 
 // ── Encryption helpers ───────────────────────────────────────────────────────
-const SALT = 'mikrodash-settings-v1'; // fixed salt — uniqueness via DATA_SECRET
+const SALT = "mikrodash-settings-v1"; // fixed salt — uniqueness via DATA_SECRET
 function _deriveKey() {
-  const secret = process.env.DATA_SECRET || 'mikrodash-insecure-default-secret';
+  const secret = process.env.DATA_SECRET || "mikrodash-insecure-default-secret";
   return crypto.scryptSync(secret, SALT, 32);
 }
 
 function encrypt(plaintext) {
-  if (!plaintext) return '';
-  const key  = _deriveKey();
-  const iv   = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const enc  = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const tag  = cipher.getAuthTag();
+  if (!plaintext) return "";
+  const key = _deriveKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
   // iv(12) + tag(16) + ciphertext — all base64
-  return Buffer.concat([iv, tag, enc]).toString('base64');
+  return Buffer.concat([iv, tag, enc]).toString("base64");
 }
 
 function decrypt(b64) {
-  if (!b64) return '';
+  if (!b64) return "";
   try {
-    const key  = _deriveKey();
-    const buf  = Buffer.from(b64, 'base64');
-    const iv   = buf.slice(0, 12);
-    const tag  = buf.slice(12, 28);
-    const enc  = buf.slice(28);
-    const dec  = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    const key = _deriveKey();
+    const buf = Buffer.from(b64, "base64");
+    const iv = buf.slice(0, 12);
+    const tag = buf.slice(12, 28);
+    const enc = buf.slice(28);
+    const dec = crypto.createDecipheriv("aes-256-gcm", key, iv);
     dec.setAuthTag(tag);
-    return dec.update(enc) + dec.final('utf8');
+    return dec.update(enc) + dec.final("utf8");
   } catch (_) {
-    return ''; // wrong key / corrupted
+    return ""; // wrong key / corrupted
   }
 }
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULTS = {
   // Router connection
-  routerHost:        process.env.ROUTER_HOST        || '192.168.88.1',
-  routerPort:        parseInt(process.env.ROUTER_PORT || '8729', 10),
-  routerTls:         (process.env.ROUTER_TLS         || 'true').toLowerCase() === 'true',
-  routerTlsInsecure: (process.env.ROUTER_TLS_INSECURE|| 'false').toLowerCase() === 'true',
-  routerUser:        process.env.ROUTER_USER         || 'admin',
-  routerPass:        '', // stored encrypted
-  defaultIf:         process.env.DEFAULT_IF          || 'ether1',
+  routerHost: process.env.ROUTER_HOST || "192.168.88.1",
+  routerPort: parseInt(process.env.ROUTER_PORT || "8729", 10),
+  routerTls: (process.env.ROUTER_TLS || "true").toLowerCase() === "true",
+  routerTlsInsecure:
+    (process.env.ROUTER_TLS_INSECURE || "false").toLowerCase() === "true",
+  routerUser: process.env.ROUTER_USER || "admin",
+  routerPass: "", // stored encrypted
+  defaultIf: process.env.DEFAULT_IF || "ether1",
 
-  // Dashboard auth
-  dashUser:          process.env.BASIC_AUTH_USER     || '',
-  dashPass:          '', // stored encrypted
+  // Dashboard auth is controlled exclusively via BASIC_AUTH_USER / BASIC_AUTH_PASS
+  // environment variables and cannot be changed through the UI at runtime.
 
   // Ping
-  pingTarget:        process.env.PING_TARGET         || '1.1.1.1',
+  pingTarget: process.env.PING_TARGET || "1.1.1.1",
 
   // Poll intervals (ms)
-  pollConns:         parseInt(process.env.CONNS_POLL_MS     || '3000',  10),
-  pollTalkers:       parseInt(process.env.TALKERS_POLL_MS   || '3000',  10),
-  pollBandwidth:     parseInt(process.env.BANDWIDTH_POLL_MS  || '3000',  10),
-  pollRouting:       parseInt(process.env.ROUTING_POLL_MS    || '10000', 10),
-  pageRouting:       true,
-  pollSystem:        parseInt(process.env.SYSTEM_POLL_MS    || '1000',  10),
-  pollWireless:      parseInt(process.env.WIRELESS_POLL_MS  || '60000', 10),
-  pollVpn:           parseInt(process.env.VPN_POLL_MS       || '10000', 10),
-  pollFirewall:      parseInt(process.env.FIREWALL_POLL_MS  || '5000',  10),
-  pollIfstatus:      parseInt(process.env.IFSTATUS_POLL_MS  || '15000', 10),
-  pollPing:          parseInt(process.env.PING_POLL_MS      || '5000',  10),
-  pollArp:           parseInt(process.env.ARP_POLL_MS       || '30000', 10),
-  pollDhcp:          parseInt(process.env.DHCP_POLL_MS      || '600000', 10),
+  pollConns: parseInt(process.env.CONNS_POLL_MS || "3000", 10),
+  pollTalkers: parseInt(process.env.TALKERS_POLL_MS || "3000", 10),
+  pollBandwidth: parseInt(process.env.BANDWIDTH_POLL_MS || "3000", 10),
+  pollRouting: parseInt(process.env.ROUTING_POLL_MS || "10000", 10),
+  pageRouting: true,
+  pollSystem: parseInt(process.env.SYSTEM_POLL_MS || "1000", 10),
+  pollWireless: parseInt(process.env.WIRELESS_POLL_MS || "60000", 10),
+  pollVpn: parseInt(process.env.VPN_POLL_MS || "10000", 10),
+  pollFirewall: parseInt(process.env.FIREWALL_POLL_MS || "5000", 10),
+  pollIfstatus: parseInt(process.env.IFSTATUS_POLL_MS || "15000", 10),
+  pollPing: parseInt(process.env.PING_POLL_MS || "5000", 10),
+  pollArp: parseInt(process.env.ARP_POLL_MS || "30000", 10),
+  pollDhcp: parseInt(process.env.DHCP_POLL_MS || "600000", 10),
 
   // Limits
-  topN:              parseInt(process.env.TOP_N             || '10',    10),
-  topTalkersN:       parseInt(process.env.TOP_TALKERS_N     || '5',     10),
-  firewallTopN:      parseInt(process.env.FIREWALL_TOP_N    || '15',    10),
-  maxConns:          parseInt(process.env.MAX_CONNS         || '20000', 10),
-  historyMinutes:    parseInt(process.env.HISTORY_MINUTES   || '30',    10),
+  topN: parseInt(process.env.TOP_N || "10", 10),
+  topTalkersN: parseInt(process.env.TOP_TALKERS_N || "5", 10),
+  firewallTopN: parseInt(process.env.FIREWALL_TOP_N || "15", 10),
+  maxConns: parseInt(process.env.MAX_CONNS || "20000", 10),
+  historyMinutes: parseInt(process.env.HISTORY_MINUTES || "30", 10),
 
   // Alert thresholds
-  alertCpuThreshold: parseInt(process.env.ALERT_CPU_THRESHOLD || '90',  10), // % — trigger CPU spike notification
-  alertPingLoss:     parseInt(process.env.ALERT_PING_LOSS     || '100', 10), // % — trigger ping loss notification
+  alertCpuThreshold: parseInt(process.env.ALERT_CPU_THRESHOLD || "90", 10), // % — trigger CPU spike notification
+  alertPingLoss: parseInt(process.env.ALERT_PING_LOSS || "100", 10), // % — trigger ping loss notification
 
   // Active router (managed by routers.js / router switcher)
-  activeRouterId:  '',
+  activeRouterId: "",
 
   // Page visibility (true = visible)
-  pageWireless:    true,
-  pageInterfaces:  true,
-  pageDhcp:        true,
-  pageVpn:         true,
+  pageWireless: true,
+  pageInterfaces: true,
+  pageDhcp: true,
+  pageVpn: true,
   pageConnections: true,
-  pageFirewall:    true,
-  pageLogs:        true,
-  pageBandwidth:   true,
+  pageFirewall: true,
+  pageLogs: true,
+  pageBandwidth: true,
 };
 
 // Fields stored encrypted in JSON
-const ENCRYPTED_FIELDS = ['routerPass', 'dashPass'];
+const ENCRYPTED_FIELDS = ["routerPass"];
 // Fields never sent to the client (only their masked presence)
-const CREDENTIAL_FIELDS = ['routerPass', 'dashPass'];
+const CREDENTIAL_FIELDS = ["routerPass"];
 
 // ── Load / Save ──────────────────────────────────────────────────────────────
 let _cache = null;
 
 function _ensureDataDir() {
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (_) {}
 }
 
 function load() {
@@ -126,7 +128,7 @@ function load() {
   _ensureDataDir();
   let stored = {};
   try {
-    stored = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    stored = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
   } catch (_) {
     // File missing or corrupt — start from defaults
   }
@@ -138,8 +140,7 @@ function load() {
     }
   }
   // Seed from env if settings file has no credentials yet
-  if (!merged.routerPass) merged.routerPass = process.env.ROUTER_PASS || '';
-  if (!merged.dashPass)   merged.dashPass   = process.env.BASIC_AUTH_PASS || '';
+  if (!merged.routerPass) merged.routerPass = process.env.ROUTER_PASS || "";
 
   _cache = merged;
   return _cache;
@@ -154,9 +155,9 @@ function save(updates) {
   // Encrypt sensitive fields before writing
   const toWrite = { ...next };
   for (const f of ENCRYPTED_FIELDS) {
-    toWrite[f] = encrypt(next[f] || '');
+    toWrite[f] = encrypt(next[f] || "");
   }
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(toWrite, null, 2), 'utf8');
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(toWrite, null, 2), "utf8");
   return next;
 }
 
@@ -165,12 +166,14 @@ function getPublic() {
   const s = load();
   const out = { ...s };
   for (const f of CREDENTIAL_FIELDS) {
-    out[f] = s[f] ? '••••••••' : '';
+    out[f] = s[f] ? "••••••••" : "";
   }
   return out;
 }
 
 /** Returns true if the value is the mask sentinel */
-function isMasked(v) { return v === '••••••••'; }
+function isMasked(v) {
+  return v === "••••••••";
+}
 
 module.exports = { load, save, getPublic, isMasked, DEFAULTS };

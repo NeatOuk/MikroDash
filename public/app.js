@@ -1,308 +1,652 @@
 /* MikroDash v0.5.2 */
-'use strict';
+"use strict";
 var socket = io();
 
 // ── Utilities ──────────────────────────────────────────────────────────────
-var DOT = '\u00b7';
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
-function fmtMbps(v){var n=+v||0;if(n>=1000)return(n/1000).toFixed(2)+' Gbps';if(n>=1)return n.toFixed(2)+' Mbps';return(n*1000).toFixed(1)+' Kbps';}
-function fmtBytes(b){if(b>=1073741824)return(b/1073741824).toFixed(1)+' GB';if(b>=1048576)return(b/1048576).toFixed(1)+' MB';if(b>=1024)return(b/1024).toFixed(1)+' KB';return b+' B';}
-function signalBars(dbm){var bars=dbm>=-55?4:dbm>=-65?3:dbm>=-75?2:dbm>-85?1:0;var h='<span class="signal-bars">';for(var i=1;i<=4;i++)h+='<span'+(i<=bars?' class="lit"':'')+'>&#8203;</span>';return h+'</span>';}
-function actionBadge(a){
-  var col=a==='accept'||a==='passthrough'?'rgba(52,211,153,.9)':
-           a==='drop'||a==='reject'||a==='tarpit'?'rgba(248,113,113,.9)':
-           a==='log'||a==='add-src-to-address-list'?'rgba(167,139,250,.9)':
-           a==='masquerade'?'rgba(56,189,248,.9)':
-           a==='dst-nat'||a==='src-nat'?'rgba(251,191,36,.9)':
-           'rgba(99,130,190,.8)';
-  return'<span style="font-family:var(--font-mono);font-size:.63rem;color:'+col+';background:'+col.replace(/[\d.]+\)$/,'0.1)')+';border:1px solid '+col.replace(/[\d.]+\)$/,'0.25)')+';border-radius:4px;padding:1px 6px;white-space:nowrap">'+esc(a)+'</span>';
+var DOT = "\u00b7";
+function esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
-function parseTxRate(raw){if(!raw)return'—';var s=String(raw).trim();var m=s.match(/^([\d.]+)\s*(G|Gbps|M|Mbps|K|Kbps|k)\b/i);if(m){var val=parseFloat(m[1]),unit=m[2].toLowerCase(),mbps;if(unit==='g'||unit==='gbps')mbps=val*1000;else if(unit==='k'||unit==='kbps')mbps=val/1000;else mbps=val;return(Number.isInteger(mbps)?mbps:+mbps.toFixed(1))+' Mbps';}if(/^\d+$/.test(s)){var bps=parseInt(s,10);var mbps2=bps/1e6;return(Number.isInteger(mbps2)?mbps2:+mbps2.toFixed(1))+' Mbps';}return s;}
-function parseUptime(raw){var s=String(raw||''),parts=[];var w=(s.match(/(\d+)w/)||[0,0])[1],d=(s.match(/(\d+)d/)||[0,0])[1];var h=(s.match(/(\d+)h/)||[0,0])[1],m=(s.match(/(\d+)m/)||[0,0])[1];if(+w)parts.push(w+'w');if(+d)parts.push(d+'d');if(+h)parts.push(h+'h');if(+m)parts.push(m+'m');return parts.length?parts.join(' '):(raw||'—');}
+function fmtMbps(v) {
+  var n = +v || 0;
+  if (n >= 1000) return (n / 1000).toFixed(2) + " Gbps";
+  if (n >= 1) return n.toFixed(2) + " Mbps";
+  return (n * 1000).toFixed(1) + " Kbps";
+}
+function fmtBytes(b) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB";
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+  if (b >= 1024) return (b / 1024).toFixed(1) + " KB";
+  return b + " B";
+}
+function signalBars(dbm) {
+  var bars =
+    dbm >= -55 ? 4 : dbm >= -65 ? 3 : dbm >= -75 ? 2 : dbm > -85 ? 1 : 0;
+  var h = '<span class="signal-bars">';
+  for (var i = 1; i <= 4; i++)
+    h += "<span" + (i <= bars ? ' class="lit"' : "") + ">&#8203;</span>";
+  return h + "</span>";
+}
+function actionBadge(a) {
+  var col =
+    a === "accept" || a === "passthrough"
+      ? "rgba(52,211,153,.9)"
+      : a === "drop" || a === "reject" || a === "tarpit"
+        ? "rgba(248,113,113,.9)"
+        : a === "log" || a === "add-src-to-address-list"
+          ? "rgba(167,139,250,.9)"
+          : a === "masquerade"
+            ? "rgba(56,189,248,.9)"
+            : a === "dst-nat" || a === "src-nat"
+              ? "rgba(251,191,36,.9)"
+              : "rgba(99,130,190,.8)";
+  return (
+    '<span style="font-family:var(--font-mono);font-size:.63rem;color:' +
+    col +
+    ";background:" +
+    col.replace(/[\d.]+\)$/, "0.1)") +
+    ";border:1px solid " +
+    col.replace(/[\d.]+\)$/, "0.25)") +
+    ';border-radius:4px;padding:1px 6px;white-space:nowrap">' +
+    esc(a) +
+    "</span>"
+  );
+}
+function parseTxRate(raw) {
+  if (!raw) return "—";
+  var s = String(raw).trim();
+  var m = s.match(/^([\d.]+)\s*(G|Gbps|M|Mbps|K|Kbps|k)\b/i);
+  if (m) {
+    var val = parseFloat(m[1]),
+      unit = m[2].toLowerCase(),
+      mbps;
+    if (unit === "g" || unit === "gbps") mbps = val * 1000;
+    else if (unit === "k" || unit === "kbps") mbps = val / 1000;
+    else mbps = val;
+    return (Number.isInteger(mbps) ? mbps : +mbps.toFixed(1)) + " Mbps";
+  }
+  if (/^\d+$/.test(s)) {
+    var bps = parseInt(s, 10);
+    var mbps2 = bps / 1e6;
+    return (Number.isInteger(mbps2) ? mbps2 : +mbps2.toFixed(1)) + " Mbps";
+  }
+  return s;
+}
+function parseUptime(raw) {
+  var s = String(raw || ""),
+    parts = [];
+  var w = (s.match(/(\d+)w/) || [0, 0])[1],
+    d = (s.match(/(\d+)d/) || [0, 0])[1];
+  var h = (s.match(/(\d+)h/) || [0, 0])[1],
+    m = (s.match(/(\d+)m/) || [0, 0])[1];
+  if (+w) parts.push(w + "w");
+  if (+d) parts.push(d + "d");
+  if (+h) parts.push(h + "h");
+  if (+m) parts.push(m + "m");
+  return parts.length ? parts.join(" ") : raw || "—";
+}
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
-var $ = function(id){return document.getElementById(id);};
-var reconnectBanner  = $('reconnectBanner');
-var rosBanner        = $('rosBanner');
-var rosBannerText    = $('rosBannerText');
-var ifaceSelect      = $('ifaceSelect');
-var wanStatusBadge   = $('wanStatusBadge');
-var liveRx           = $('liveRx');
-var liveTx           = $('liveTx');
-var lanOverview      = $('lanOverview');
-var wanIpDisplay     = $('wanIpDisplay');
-var topSources       = $('topSources');
-var topDests         = $('topDests');
-var connTotal        = $('connTotal');
-var protoBars        = $('protoBars');
-var talkersTable     = $('talkersTable');
-var logsEl           = $('logs');
-var logSearch        = $('logSearch');
-var logSeverity      = $('logSeverity');
-var toggleScroll     = $('toggleScroll');
-var clearLogs        = $('clearLogs');
-var gaugeRow         = $('gaugeRow');
-var sysMeta          = $('sysMeta');
-var rosUpdateRow     = $('rosUpdateRow');
-var uptimeDisplay    = $('uptimeDisplay');
-var uptimeChip       = $('uptimeChip');
-var wirelessTable    = $('wirelessTable');
-var wirelessTabBadge = $('wirelessTabBadge');
-var wirelessNavBadge = $('wirelessNavBadge');
-var vpnTable         = $('vpnTable');
-var vpnCount         = $('vpnCount');
-var firewallTable    = $('firewallTable');
-var pageTitle        = $('pageTitle');
-var ifaceGrid        = $('ifaceGrid');
-var ifaceCount       = $('ifaceCount');
-var vpnPageCount     = $('vpnPageCount');
-var dhcpTable        = $('dhcpTable');
-var dhcpTotalBadge   = $('dhcpTotalBadge');
-var dhcpNavBadge     = $('dhcpNavBadge');
-var dhcpSearch       = $('dhcpSearch');
+var $ = function (id) {
+  return document.getElementById(id);
+};
+var reconnectBanner = $("reconnectBanner");
+var rosBanner = $("rosBanner");
+var rosBannerText = $("rosBannerText");
+var ifaceSelect = $("ifaceSelect");
+var wanStatusBadge = $("wanStatusBadge");
+var liveRx = $("liveRx");
+var liveTx = $("liveTx");
+var lanOverview = $("lanOverview");
+var wanIpDisplay = $("wanIpDisplay");
+var topSources = $("topSources");
+var topDests = $("topDests");
+var connTotal = $("connTotal");
+var protoBars = $("protoBars");
+var talkersTable = $("talkersTable");
+var logsEl = $("logs");
+var logSearch = $("logSearch");
+var logSeverity = $("logSeverity");
+var toggleScroll = $("toggleScroll");
+var clearLogs = $("clearLogs");
+var gaugeRow = $("gaugeRow");
+var sysMeta = $("sysMeta");
+var rosUpdateRow = $("rosUpdateRow");
+var uptimeDisplay = $("uptimeDisplay");
+var uptimeChip = $("uptimeChip");
+var wirelessTable = $("wirelessTable");
+var wirelessTabBadge = $("wirelessTabBadge");
+var wirelessNavBadge = $("wirelessNavBadge");
+var vpnTable = $("vpnTable");
+var vpnCount = $("vpnCount");
+var firewallTable = $("firewallTable");
+var pageTitle = $("pageTitle");
+var ifaceGrid = $("ifaceGrid");
+var ifaceCount = $("ifaceCount");
+var vpnPageCount = $("vpnPageCount");
+var dhcpTable = $("dhcpTable");
+var dhcpTotalBadge = $("dhcpTotalBadge");
+var dhcpNavBadge = $("dhcpNavBadge");
+var dhcpSearch = $("dhcpSearch");
 
 // ── State ──────────────────────────────────────────────────────────────────
-var autoScroll = true, logFilter = '', logLevel = '';
-var currentIf = '', windowSecs = 60;
-var fwTab = 'top', fwData = {};
-var connHistory = [], MAX_CONN_HIST = 60;
-var lastTalkers = null, lastLanData = null;
-var allLeases = [], leaseFilter = '';
-var _dhcpTotalPoolSize = 0;  // updated from lan:overview; used to render gauge from leases:list
-var _dhcpNetworksData  = null; // last lan:overview payload
+var autoScroll = true,
+  logFilter = "",
+  logLevel = "";
+var currentIf = "",
+  windowSecs = 60;
+var fwTab = "top",
+  fwData = {};
+var connHistory = [],
+  MAX_CONN_HIST = 60;
+var lastTalkers = null,
+  lastLanData = null;
+var allLeases = [],
+  leaseFilter = "";
+var _dhcpTotalPoolSize = 0; // updated from lan:overview; used to render gauge from leases:list
+var _dhcpNetworksData = null; // last lan:overview payload
 
 // ── Theme toggle ───────────────────────────────────────────────────────────
-var THEME_KEY = 'mikrodash_theme';
-function applyTheme(t){
-  document.documentElement.setAttribute('data-theme', t);
-  document.documentElement.setAttribute('data-bs-theme', t === 'light' ? 'light' : 'dark');
-  var p = $('themeIconPath');
-  if(p) p.setAttribute('d', t==='light'
-    ? 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'
-    : 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z');
-  try{localStorage.setItem(THEME_KEY, t);}catch(e){}
+var THEME_KEY = "mikrodash_theme";
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  document.documentElement.setAttribute(
+    "data-bs-theme",
+    t === "light" ? "light" : "dark",
+  );
+  var p = $("themeIconPath");
+  if (p)
+    p.setAttribute(
+      "d",
+      t === "light"
+        ? "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"
+        : "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z",
+    );
+  try {
+    localStorage.setItem(THEME_KEY, t);
+  } catch (e) {}
 }
-(function(){
-  var saved='dark';
-  try{saved=localStorage.getItem(THEME_KEY)||'dark';}catch(e){}
+(function () {
+  var saved = "dark";
+  try {
+    saved = localStorage.getItem(THEME_KEY) || "dark";
+  } catch (e) {}
   applyTheme(saved);
 })();
-var themeToggle = $('themeToggle');
-if(themeToggle) themeToggle.addEventListener('click', function(){
-  var cur = document.documentElement.getAttribute('data-theme')||'dark';
-  applyTheme(cur==='light'?'dark':'light');
-});
+var themeToggle = $("themeToggle");
+if (themeToggle)
+  themeToggle.addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme") || "dark";
+    applyTheme(cur === "light" ? "dark" : "light");
+  });
 
 // ── Page router ────────────────────────────────────────────────────────────
-var PAGE_TITLES = {dashboard:'Dashboard',connections:'Connections',wireless:'Wireless',interfaces:'Interfaces',dhcp:'DHCP',firewall:'Firewall',vpn:'VPN',logs:'Logs',bandwidth:'Bandwidth',settings:'Settings',info:'About',routing:'Routing'};
-var PAGE_KEYS   = ['dashboard','wireless','interfaces','dhcp','vpn','connections','routing','bandwidth','firewall','logs'];
-var _currentPage = 'dashboard';
-function pageVisible(name){ return _currentPage === name && !document.hidden; }
+var PAGE_TITLES = {
+  dashboard: "Dashboard",
+  connections: "Connections",
+  wireless: "Wireless",
+  interfaces: "Interfaces",
+  dhcp: "DHCP",
+  firewall: "Firewall",
+  vpn: "VPN",
+  logs: "Logs",
+  bandwidth: "Bandwidth",
+  settings: "Settings",
+  info: "About",
+  routing: "Routing",
+};
+var PAGE_KEYS = [
+  "dashboard",
+  "wireless",
+  "interfaces",
+  "dhcp",
+  "vpn",
+  "connections",
+  "routing",
+  "bandwidth",
+  "firewall",
+  "logs",
+];
+var _currentPage = "dashboard";
+function pageVisible(name) {
+  return _currentPage === name && !document.hidden;
+}
 // Fetch and display the running version on the About page — called once on first visit.
 var _aboutVersionFetched = false;
 function fetchAboutVersion() {
   if (_aboutVersionFetched) return;
   _aboutVersionFetched = true;
-  fetch('/healthz').then(function(r){ return r.json(); }).then(function(d){
-    var el = $('aboutVersion');
-    if (el && d.version) el.textContent = 'v' + d.version;
-  }).catch(function(){});
+  fetch("/healthz")
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (d) {
+      var el = $("aboutVersion");
+      if (el && d.version) el.textContent = "v" + d.version;
+    })
+    .catch(function () {});
 }
 
-function showPage(name){
+function showPage(name) {
   _currentPage = name;
-  document.querySelectorAll('.page-view').forEach(function(p){p.classList.remove('active');});
-  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
-  var page = $('page-'+name); if(page) page.classList.add('active');
-  var nav  = document.querySelector('.nav-item[data-page="'+name+'"]'); if(nav) nav.classList.add('active');
-  if (name === 'info') fetchAboutVersion();
-  if(pageTitle) pageTitle.textContent = PAGE_TITLES[name]||name;
-  document.dispatchEvent(new CustomEvent('mikrodash:pagechange', { detail: name }));
+  document.querySelectorAll(".page-view").forEach(function (p) {
+    p.classList.remove("active");
+  });
+  document.querySelectorAll(".nav-item").forEach(function (n) {
+    n.classList.remove("active");
+  });
+  var page = $("page-" + name);
+  if (page) page.classList.add("active");
+  var nav = document.querySelector('.nav-item[data-page="' + name + '"]');
+  if (nav) nav.classList.add("active");
+  if (name === "info") fetchAboutVersion();
+  if (pageTitle) pageTitle.textContent = PAGE_TITLES[name] || name;
+  document.dispatchEvent(
+    new CustomEvent("mikrodash:pagechange", { detail: name }),
+  );
 }
-document.querySelectorAll('.nav-item').forEach(function(item){
-  item.addEventListener('click', function(e){e.preventDefault();showPage(item.dataset.page);});
-});
-
-// ── Keyboard shortcuts ─────────────────────────────────────────────────────
-var kbdHint = $('kbdHint');
-var kbdTimer = null;
-function showKbdHint(){
-  if(!kbdHint) return;
-  kbdHint.classList.add('show');
-  clearTimeout(kbdTimer);
-  kbdTimer = setTimeout(function(){kbdHint.classList.remove('show');}, 1800);
-}
-document.addEventListener('keydown', function(e){
-  if(e.target && (e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')) return;
-  if(e.key==='/'){ e.preventDefault(); showPage('logs'); setTimeout(function(){if(logSearch)logSearch.focus();},100); showKbdHint(); return;}
-  var n = parseInt(e.key);
-  if(n>=1&&n<=PAGE_KEYS.length){ showPage(PAGE_KEYS[n-1]); showKbdHint(); }
-});
-
-// ── Firewall sub-tabs ──────────────────────────────────────────────────────
-document.querySelectorAll('.fw-tab').forEach(function(tab){
-  tab.addEventListener('click', function(){
-    document.querySelectorAll('.fw-tab').forEach(function(t){t.classList.remove('active');});
-    tab.classList.add('active'); fwTab = tab.dataset.fw; renderFirewallTab();
+document.querySelectorAll(".nav-item").forEach(function (item) {
+  item.addEventListener("click", function (e) {
+    e.preventDefault();
+    showPage(item.dataset.page);
   });
 });
 
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────
+var kbdHint = $("kbdHint");
+var kbdTimer = null;
+function showKbdHint() {
+  if (!kbdHint) return;
+  kbdHint.classList.add("show");
+  clearTimeout(kbdTimer);
+  kbdTimer = setTimeout(function () {
+    kbdHint.classList.remove("show");
+  }, 1800);
+}
+document.addEventListener("keydown", function (e) {
+  if (
+    e.target &&
+    (e.target.tagName === "INPUT" ||
+      e.target.tagName === "SELECT" ||
+      e.target.tagName === "TEXTAREA")
+  )
+    return;
+  if (e.key === "/") {
+    e.preventDefault();
+    showPage("logs");
+    setTimeout(function () {
+      if (logSearch) logSearch.focus();
+    }, 100);
+    showKbdHint();
+    return;
+  }
+  var n = parseInt(e.key);
+  if (n >= 1 && n <= PAGE_KEYS.length) {
+    showPage(PAGE_KEYS[n - 1]);
+    showKbdHint();
+  }
+});
+
+// ── Firewall sub-tabs ──────────────────────────────────────────────────────
+document.querySelectorAll(".fw-tab").forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    document.querySelectorAll(".fw-tab").forEach(function (t) {
+      t.classList.remove("active");
+    });
+    tab.classList.add("active");
+    fwTab = tab.dataset.fw;
+    renderFirewallTab();
+  });
+});
 
 // ── Traffic Chart ──────────────────────────────────────────────────────────
-var trafficCtx = $('trafficChart');
+var trafficCtx = $("trafficChart");
 var chart = null;
 var allPoints = [];
 var MAX_CLIENT_POINTS = 1800; // 30 min at 1 Hz — matches server HISTORY_MINUTES default
 
-function windowedPoints(){
-  var cutoff = Date.now()-(windowSecs*1000), out=[];
-  for(var i=allPoints.length-1;i>=0;i--){if(allPoints[i].ts<cutoff)break;out.unshift(allPoints[i]);}
+function windowedPoints() {
+  var cutoff = Date.now() - windowSecs * 1000,
+    out = [];
+  for (var i = allPoints.length - 1; i >= 0; i--) {
+    if (allPoints[i].ts < cutoff) break;
+    out.unshift(allPoints[i]);
+  }
   return out;
 }
-function makeChartObj(){
-  if(chart){chart.destroy();chart=null;}
-  chart=new Chart(trafficCtx,{type:'line',data:{labels:[],datasets:[
-    {label:'RX',data:[],borderColor:'#38bdf8',backgroundColor:'rgba(56,189,248,.08)',borderWidth:1.5,tension:0.3,pointRadius:0,fill:true},
-    {label:'TX',data:[],borderColor:'#34d399',backgroundColor:'rgba(52,211,153,.06)',borderWidth:1.5,tension:0.3,pointRadius:0,fill:true}
-  ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
-    plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(7,9,15,.9)',borderColor:'rgba(99,130,190,.2)',borderWidth:1,
-      titleFont:{family:"'JetBrains Mono',monospace",size:11},bodyFont:{family:"'JetBrains Mono',monospace",size:11},
-      callbacks:{label:function(ctx){return' '+ctx.dataset.label+': '+fmtMbps(ctx.parsed.y);}}}},
-    scales:{x:{display:true,grid:{color:'rgba(99,130,190,.07)'},ticks:{color:'rgba(148,163,190,.4)',font:{family:"'JetBrains Mono',monospace",size:10},maxTicksLimit:8,maxRotation:0}},
-            y:{beginAtZero:true,grid:{color:'rgba(99,130,190,.07)'},ticks:{color:'rgba(148,163,190,.4)',font:{family:"'JetBrains Mono',monospace",size:10},callback:function(v){return fmtMbps(v);}}}}}});
+function makeChartObj() {
+  if (chart) {
+    chart.destroy();
+    chart = null;
+  }
+  chart = new Chart(trafficCtx, {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: "RX",
+          data: [],
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56,189,248,.08)",
+          borderWidth: 1.5,
+          tension: 0.3,
+          pointRadius: 0,
+          fill: true,
+        },
+        {
+          label: "TX",
+          data: [],
+          borderColor: "#34d399",
+          backgroundColor: "rgba(52,211,153,.06)",
+          borderWidth: 1.5,
+          tension: 0.3,
+          pointRadius: 0,
+          fill: true,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "rgba(7,9,15,.9)",
+          borderColor: "rgba(99,130,190,.2)",
+          borderWidth: 1,
+          titleFont: { family: "'JetBrains Mono',monospace", size: 11 },
+          bodyFont: { family: "'JetBrains Mono',monospace", size: 11 },
+          callbacks: {
+            label: function (ctx) {
+              return " " + ctx.dataset.label + ": " + fmtMbps(ctx.parsed.y);
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          display: true,
+          grid: { color: "rgba(99,130,190,.07)" },
+          ticks: {
+            color: "rgba(148,163,190,.4)",
+            font: { family: "'JetBrains Mono',monospace", size: 10 },
+            maxTicksLimit: 8,
+            maxRotation: 0,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: "rgba(99,130,190,.07)" },
+          ticks: {
+            color: "rgba(148,163,190,.4)",
+            font: { family: "'JetBrains Mono',monospace", size: 10 },
+            callback: function (v) {
+              return fmtMbps(v);
+            },
+          },
+        },
+      },
+    },
+  });
 }
-function redrawChart(){
-  var pts=windowedPoints(); if(!chart)makeChartObj();
-  chart.data.labels=pts.map(function(p){return new Date(p.ts).toLocaleTimeString();});
-  chart.data.datasets[0].data=pts.map(function(p){return p.rx_mbps;});
-  chart.data.datasets[1].data=pts.map(function(p){return p.tx_mbps;});
-  chart.update('none');
+function redrawChart() {
+  var pts = windowedPoints();
+  if (!chart) makeChartObj();
+  chart.data.labels = pts.map(function (p) {
+    return new Date(p.ts).toLocaleTimeString();
+  });
+  chart.data.datasets[0].data = pts.map(function (p) {
+    return p.rx_mbps;
+  });
+  chart.data.datasets[1].data = pts.map(function (p) {
+    return p.tx_mbps;
+  });
+  chart.update("none");
 }
 
-function applyWindow(secs){windowSecs=secs;redrawChart();}
-function initChart(points){allPoints=(points||[]).slice(-MAX_CLIENT_POINTS);if(!chart)makeChartObj();redrawChart();}
+function applyWindow(secs) {
+  windowSecs = secs;
+  redrawChart();
+}
+function initChart(points) {
+  allPoints = (points || []).slice(-MAX_CLIENT_POINTS);
+  if (!chart) makeChartObj();
+  redrawChart();
+}
 
 // ── WAN ────────────────────────────────────────────────────────────────────
-function renderWanStatus(s){
-  wanStatusBadge.className='wan-badge';
-  if(s.disabled){wanStatusBadge.className+=' wan-disabled';wanStatusBadge.textContent=(s.ifName||'?')+' · disabled';}
-  else if(s.running){wanStatusBadge.className+=' wan-up';wanStatusBadge.textContent=(s.ifName||'?')+' · up';}
-  else{wanStatusBadge.className+=' wan-down';wanStatusBadge.textContent=(s.ifName||'?')+' · down';}
+function renderWanStatus(s) {
+  wanStatusBadge.className = "wan-badge";
+  if (s.disabled) {
+    wanStatusBadge.className += " wan-disabled";
+    wanStatusBadge.textContent = (s.ifName || "?") + " · disabled";
+  } else if (s.running) {
+    wanStatusBadge.className += " wan-up";
+    wanStatusBadge.textContent = (s.ifName || "?") + " · up";
+  } else {
+    wanStatusBadge.className += " wan-down";
+    wanStatusBadge.textContent = (s.ifName || "?") + " · down";
+  }
 }
 
 // ── System ─────────────────────────────────────────────────────────────────
 function _rotPt(dx, dy, cos, sin, ox, oy) {
-  return [(dx*cos - dy*sin) + ox, (dx*sin + dy*cos) + oy];
+  return [dx * cos - dy * sin + ox, dx * sin + dy * cos + oy];
 }
-function _lp(a, b, t) { return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
-function _v(p) { return p[0].toFixed(2)+','+p[1].toFixed(2); }
+function _lp(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+function _v(p) {
+  return p[0].toFixed(2) + "," + p[1].toFixed(2);
+}
 
 function gauge(label, pct, cls) {
   var COLOURS = {
-    cpu: ['#38bdf8','#818cf8'],   // sky → indigo
-    mem: ['#34d399','#34d399'],   // solid green
-    hdd: ['#fb923c','#f59f00'],   // orange → amber
-    warn:['#f59f00','#fb923c'],   // amber → orange
-    crit:['#f87171','#ef4444'],   // red
+    cpu: ["#38bdf8", "#818cf8"], // sky → indigo
+    mem: ["#34d399", "#34d399"], // solid green
+    hdd: ["#fb923c", "#f59f00"], // orange → amber
+    warn: ["#f59f00", "#fb923c"], // amber → orange
+    crit: ["#f87171", "#ef4444"], // red
   };
-  var activeCls = pct > 90 ? 'crit' : pct > 75 ? 'warn' : cls;
+  var activeCls = pct > 90 ? "crit" : pct > 75 ? "warn" : cls;
   var cols = COLOURS[activeCls] || COLOURS.cpu;
-  var pctCls = pct > 90 ? ' gauge-val-crit' : pct > 75 ? ' gauge-val-warn' : '';
+  var pctCls = pct > 90 ? " gauge-val-crit" : pct > 75 ? " gauge-val-warn" : "";
 
-  var SEGS = 28, START_DEG = 180, SWEEP_DEG = 180;
-  var cx = 50, cy = 45, r = 38, segW = 3.2, segH = 10, RN = 0.15;
+  var SEGS = 28,
+    START_DEG = 180,
+    SWEEP_DEG = 180;
+  var cx = 50,
+    cy = 45,
+    r = 38,
+    segW = 3.2,
+    segH = 10,
+    RN = 0.15;
   var litSegs = Math.round((pct / 100) * SEGS);
-  var r1 = parseInt(cols[0].slice(1,3),16), g1 = parseInt(cols[0].slice(3,5),16), b1 = parseInt(cols[0].slice(5,7),16);
-  var r2 = parseInt(cols[1].slice(1,3),16), g2 = parseInt(cols[1].slice(3,5),16), b2 = parseInt(cols[1].slice(5,7),16);
-  var hw = segW/2, hh = segH/2;
+  var r1 = parseInt(cols[0].slice(1, 3), 16),
+    g1 = parseInt(cols[0].slice(3, 5), 16),
+    b1 = parseInt(cols[0].slice(5, 7), 16);
+  var r2 = parseInt(cols[1].slice(1, 3), 16),
+    g2 = parseInt(cols[1].slice(3, 5), 16),
+    b2 = parseInt(cols[1].slice(5, 7), 16);
+  var hw = segW / 2,
+    hh = segH / 2;
   var paths = [];
 
   for (var i = 0; i < SEGS; i++) {
     var angleDeg = START_DEG + (i + 0.5) * (SWEEP_DEG / SEGS);
-    var angleRad = angleDeg * Math.PI / 180;
-    var sx = cx + r * Math.cos(angleRad), sy = cy + r * Math.sin(angleRad);
+    var angleRad = (angleDeg * Math.PI) / 180;
+    var sx = cx + r * Math.cos(angleRad),
+      sy = cy + r * Math.sin(angleRad);
     var t = SEGS > 1 ? i / (SEGS - 1) : 0;
     var colour, opacity;
     if (i < litSegs) {
-      var ri = Math.round(r1+(r2-r1)*t), gi = Math.round(g1+(g2-g1)*t), bi = Math.round(b1+(b2-b1)*t);
-      colour = 'rgb('+ri+','+gi+','+bi+')';
+      var ri = Math.round(r1 + (r2 - r1) * t),
+        gi = Math.round(g1 + (g2 - g1) * t),
+        bi = Math.round(b1 + (b2 - b1) * t);
+      colour = "rgb(" + ri + "," + gi + "," + bi + ")";
       opacity = 1;
     } else {
-      colour = 'rgba(99,130,190,0.12)';
+      colour = "rgba(99,130,190,0.12)";
       opacity = 0.7;
     }
-    var rotRad = (angleDeg + 90) * Math.PI / 180;
-    var cos = Math.cos(rotRad), sin = Math.sin(rotRad);
-    var tl = _rotPt(-hw,-hh,cos,sin,sx,sy), tr = _rotPt(hw,-hh,cos,sin,sx,sy);
-    var br = _rotPt(hw,hh,cos,sin,sx,sy),  bl = _rotPt(-hw,hh,cos,sin,sx,sy);
-    var d = ['M',_v(_lp(tl,tr,RN)),'L',_v(_lp(tr,tl,RN)),
-             'Q',_v(tr),_v(_lp(tr,br,RN)),'L',_v(_lp(br,tr,RN)),
-             'Q',_v(br),_v(_lp(br,bl,RN)),'L',_v(_lp(bl,br,RN)),
-             'Q',_v(bl),_v(_lp(bl,tl,RN)),'L',_v(_lp(tl,bl,RN)),
-             'Q',_v(tl),_v(_lp(tl,tr,RN)),'Z'].join(' ');
-    paths.push('<path d="'+d+'" fill="'+colour+'" opacity="'+opacity+'"/>');
+    var rotRad = ((angleDeg + 90) * Math.PI) / 180;
+    var cos = Math.cos(rotRad),
+      sin = Math.sin(rotRad);
+    var tl = _rotPt(-hw, -hh, cos, sin, sx, sy),
+      tr = _rotPt(hw, -hh, cos, sin, sx, sy);
+    var br = _rotPt(hw, hh, cos, sin, sx, sy),
+      bl = _rotPt(-hw, hh, cos, sin, sx, sy);
+    var d = [
+      "M",
+      _v(_lp(tl, tr, RN)),
+      "L",
+      _v(_lp(tr, tl, RN)),
+      "Q",
+      _v(tr),
+      _v(_lp(tr, br, RN)),
+      "L",
+      _v(_lp(br, tr, RN)),
+      "Q",
+      _v(br),
+      _v(_lp(br, bl, RN)),
+      "L",
+      _v(_lp(bl, br, RN)),
+      "Q",
+      _v(bl),
+      _v(_lp(bl, tl, RN)),
+      "L",
+      _v(_lp(tl, bl, RN)),
+      "Q",
+      _v(tl),
+      _v(_lp(tl, tr, RN)),
+      "Z",
+    ].join(" ");
+    paths.push(
+      '<path d="' + d + '" fill="' + colour + '" opacity="' + opacity + '"/>',
+    );
   }
 
-  return '<div class="gauge-arc-wrap">'+
-    '<svg class="gauge-arc-svg" viewBox="0 0 100 62">'+
-      paths.join('')+
-      '<text class="gauge-arc-pct'+pctCls+'" x="50" y="52" font-size="10">'+pct+'%</text>'+
-      '<text class="gauge-arc-lbl" x="50" y="61" font-size="6">'+esc(label)+'</text>'+
-    '</svg>'+
-  '</div>';
+  return (
+    '<div class="gauge-arc-wrap">' +
+    '<svg class="gauge-arc-svg" viewBox="0 0 100 62">' +
+    paths.join("") +
+    '<text class="gauge-arc-pct' +
+    pctCls +
+    '" x="50" y="52" font-size="10">' +
+    pct +
+    "%</text>" +
+    '<text class="gauge-arc-lbl" x="50" y="61" font-size="6">' +
+    esc(label) +
+    "</text>" +
+    "</svg>" +
+    "</div>"
+  );
 }
 var _sysMetaWritten = false;
-var _pendingSysData = null, _sysRafId = null;
+var _pendingSysData = null,
+  _sysRafId = null;
 function _flushSysUpdate() {
   _sysRafId = null;
   if (document.hidden) return; // tab backgrounded — skip render, data stays pending
-  var d = _pendingSysData; if (!d) return;
+  var d = _pendingSysData;
+  if (!d) return;
   _pendingSysData = null;
   var ut = parseUptime(d.uptimeRaw);
-  uptimeDisplay.textContent = 'Uptime: '+ut;
-  if(uptimeChip){uptimeChip.textContent=ut;uptimeChip.style.display='';}
-  var html=gauge('CPU',d.cpuLoad,'cpu')+gauge('RAM',d.memPct,'mem');
-  if(d.totalHdd>0)html+=gauge('Storage',d.hddPct,'hdd');
-  gaugeRow.innerHTML=html;
-  if(!_sysMetaWritten&&(d.boardName||d.version||d.cpuCount||d.totalMem)){
-    var meta='';
-    if(d.boardName)meta+='<div class="sys-meta-item"><strong>'+esc(d.boardName)+'</strong></div>';
-    if(d.version)  meta+='<div class="sys-meta-item">ROS <strong>'+esc(d.version)+'</strong></div>';
-    if(d.cpuCount) meta+='<div class="sys-meta-item"><strong>'+d.cpuCount+'</strong>×CPU</div>';
-    if(d.cpuFreq)  meta+='<div class="sys-meta-item"><strong>'+d.cpuFreq+'</strong> MHz</div>';
-    if(d.totalMem) meta+='<div class="sys-meta-item"><strong>'+fmtBytes(d.totalMem)+'</strong> RAM</div>';
-    sysMeta.innerHTML=meta;
-    _sysMetaWritten=true;
+  uptimeDisplay.textContent = "Uptime: " + ut;
+  if (uptimeChip) {
+    uptimeChip.textContent = ut;
+    uptimeChip.style.display = "";
   }
-  var tempSlot=$('sysMetaTemp');
-  if(d.tempC!=null){
-    if(!tempSlot){
-      var el=document.createElement('div');
-      el.className='sys-meta-item';el.id='sysMetaTemp';
-      el.innerHTML='<strong>'+d.tempC+'°C</strong>';
-      if(sysMeta)sysMeta.appendChild(el);
+  var html = gauge("CPU", d.cpuLoad, "cpu") + gauge("RAM", d.memPct, "mem");
+  if (d.totalHdd > 0) html += gauge("Storage", d.hddPct, "hdd");
+  gaugeRow.innerHTML = html;
+  if (
+    !_sysMetaWritten &&
+    (d.boardName || d.version || d.cpuCount || d.totalMem)
+  ) {
+    var meta = "";
+    if (d.boardName)
+      meta +=
+        '<div class="sys-meta-item"><strong>' +
+        esc(d.boardName) +
+        "</strong></div>";
+    if (d.version)
+      meta +=
+        '<div class="sys-meta-item">ROS <strong>' +
+        esc(d.version) +
+        "</strong></div>";
+    if (d.cpuCount)
+      meta +=
+        '<div class="sys-meta-item"><strong>' +
+        d.cpuCount +
+        "</strong>×CPU</div>";
+    if (d.cpuFreq)
+      meta +=
+        '<div class="sys-meta-item"><strong>' +
+        d.cpuFreq +
+        "</strong> MHz</div>";
+    if (d.totalMem)
+      meta +=
+        '<div class="sys-meta-item"><strong>' +
+        fmtBytes(d.totalMem) +
+        "</strong> RAM</div>";
+    sysMeta.innerHTML = meta;
+    _sysMetaWritten = true;
+  }
+  var tempSlot = $("sysMetaTemp");
+  if (d.tempC != null) {
+    if (!tempSlot) {
+      var el = document.createElement("div");
+      el.className = "sys-meta-item";
+      el.id = "sysMetaTemp";
+      el.innerHTML = "<strong>" + d.tempC + "°C</strong>";
+      if (sysMeta) sysMeta.appendChild(el);
     } else {
-      tempSlot.innerHTML='<strong>'+d.tempC+'°C</strong>';
+      tempSlot.innerHTML = "<strong>" + d.tempC + "°C</strong>";
     }
   }
-  if(rosUpdateRow){
-    var ur='';
-    if(d.updateAvailable&&d.latestVersion){
-      var installedBase=(d.version||'').replace(/\s*\(.*\)/,'').trim();
-      ur='<div class="ros-update-row warn"><span class="ros-update-dot"></span>&#11014; '+esc(installedBase)+' &rarr; <strong>'+esc(d.latestVersion)+'</strong> available</div>';
-    }else if(d.latestVersion){
-      ur='<div class="ros-update-row ok"><span class="ros-update-dot"></span>&#10003; RouterOS <strong>'+esc(d.latestVersion)+'</strong> &mdash; Up to date</div>';
-    }else if(d.updateStatus){
-      var isUnavail=/unavailable|cannot|error|failed/i.test(d.updateStatus);
-      var rowCls=isUnavail?'ros-update-row muted':'ros-update-row pending';
-      ur='<div class="'+rowCls+'"><span class="ros-update-dot"></span>'+esc(d.updateStatus)+'</div>';
-    }else{
-      ur='<div class="ros-update-row pending"><span class="ros-update-dot"></span>Checking for updates…</div>';
+  if (rosUpdateRow) {
+    var ur = "";
+    if (d.updateAvailable && d.latestVersion) {
+      var installedBase = (d.version || "").replace(/\s*\(.*\)/, "").trim();
+      ur =
+        '<div class="ros-update-row warn"><span class="ros-update-dot"></span>&#11014; ' +
+        esc(installedBase) +
+        " &rarr; <strong>" +
+        esc(d.latestVersion) +
+        "</strong> available</div>";
+    } else if (d.latestVersion) {
+      ur =
+        '<div class="ros-update-row ok"><span class="ros-update-dot"></span>&#10003; RouterOS <strong>' +
+        esc(d.latestVersion) +
+        "</strong> &mdash; Up to date</div>";
+    } else if (d.updateStatus) {
+      var isUnavail = /unavailable|cannot|error|failed/i.test(d.updateStatus);
+      var rowCls = isUnavail
+        ? "ros-update-row muted"
+        : "ros-update-row pending";
+      ur =
+        '<div class="' +
+        rowCls +
+        '"><span class="ros-update-dot"></span>' +
+        esc(d.updateStatus) +
+        "</div>";
+    } else {
+      ur =
+        '<div class="ros-update-row pending"><span class="ros-update-dot"></span>Checking for updates…</div>';
     }
-    rosUpdateRow.innerHTML=ur;
+    rosUpdateRow.innerHTML = ur;
   }
 }
-socket.on('system:update',function(d){
+socket.on("system:update", function (d) {
   // Defer all DOM writes to the next animation frame so rapid 1-s ticks
   // don't trigger redundant layout/paint when the browser is busy.
   _pendingSysData = d;
@@ -310,232 +654,469 @@ socket.on('system:update',function(d){
 });
 
 // ── LAN ────────────────────────────────────────────────────────────────────
-socket.on('lan:overview',function(data){
+socket.on("lan:overview", function (data) {
   // Detect local country from WAN IP for arc origin
-  if(window._wanGeoDetect) window._wanGeoDetect(data.wanIp);
+  if (window._wanGeoDetect) window._wanGeoDetect(data.wanIp);
   // WAN IP
-  var wip=(data.wanIp||'').split('/')[0]||'\u2014';
-  var ndWanIp=$('ndWanIp'); if(ndWanIp)ndWanIp.textContent=wip;
-  if(wanIpDisplay)wanIpDisplay.textContent=wip;
+  var wip = (data.wanIp || "").split("/")[0] || "\u2014";
+  var ndWanIp = $("ndWanIp");
+  if (ndWanIp) ndWanIp.textContent = wip;
+  if (wanIpDisplay) wanIpDisplay.textContent = wip;
   // LAN info strip (dashboard card)
-  var nets=data.networks||[];
-  var ndLanCidr=$('ndLanCidr'); if(ndLanCidr)ndLanCidr.textContent=nets.length?nets.map(function(n){return n.cidr;}).join(', '):'\u2014';
-  var ndGateway=$('ndGateway'); if(ndGateway)ndGateway.textContent=nets.length&&nets[0].gateway?nets[0].gateway:'\u2014';
+  var nets = data.networks || [];
+  var ndLanCidr = $("ndLanCidr");
+  if (ndLanCidr)
+    ndLanCidr.textContent = nets.length
+      ? nets
+          .map(function (n) {
+            return n.cidr;
+          })
+          .join(", ")
+      : "\u2014";
+  var ndGateway = $("ndGateway");
+  if (ndGateway)
+    ndGateway.textContent =
+      nets.length && nets[0].gateway ? nets[0].gateway : "\u2014";
 
-  var nets=(data&&data.networks)?data.networks:[];
-  if(!nets.length){if(lastLanData)return;lanOverview.innerHTML='<div class="empty-state">No DHCP networks</div>';return;}
-  lastLanData=data;
-  lanOverview.innerHTML=nets.map(function(n){
-    return'<div class="lan-net"><div class="lan-cidr"><span style="color:var(--text-muted);font-size:.65rem;margin-right:.3rem">LAN:</span>'+esc(n.cidr)+'</div>'+
-      '<div class="lan-meta">GW: '+esc(n.gateway||'\u2014')+' '+DOT+' DNS: '+esc(n.dns||'\u2014')+' '+DOT+' <strong style="color:rgba(200,215,240,.75)">'+n.leaseCount+'</strong> leases</div></div>';
-  }).join('');
+  var nets = data && data.networks ? data.networks : [];
+  if (!nets.length) {
+    if (lastLanData) return;
+    lanOverview.innerHTML = '<div class="empty-state">No DHCP networks</div>';
+    return;
+  }
+  lastLanData = data;
+  lanOverview.innerHTML = nets
+    .map(function (n) {
+      return (
+        '<div class="lan-net"><div class="lan-cidr"><span style="color:var(--text-muted);font-size:.65rem;margin-right:.3rem">LAN:</span>' +
+        esc(n.cidr) +
+        "</div>" +
+        '<div class="lan-meta">GW: ' +
+        esc(n.gateway || "\u2014") +
+        " " +
+        DOT +
+        " DNS: " +
+        esc(n.dns || "\u2014") +
+        " " +
+        DOT +
+        ' <strong style="color:rgba(200,215,240,.75)">' +
+        n.leaseCount +
+        "</strong> leases</div></div>"
+      );
+    })
+    .join("");
 
   // ── DHCP page: subnet table ───────────────────────────────────────────────
-  var subnetEl=$('dhcpSubnetTable');
-  if(subnetEl){
-    if(!nets.length){
-      subnetEl.innerHTML='<div class="empty-state" style="font-size:.75rem;padding:.5rem 0">No DHCP networks</div>';
+  var subnetEl = $("dhcpSubnetTable");
+  if (subnetEl) {
+    if (!nets.length) {
+      subnetEl.innerHTML =
+        '<div class="empty-state" style="font-size:.75rem;padding:.5rem 0">No DHCP networks</div>';
     } else {
-      var rows=nets.map(function(n){
-        var used=n.leaseCount||0;
-        var pool=n.poolSize||0;
-        var pct=pool>0?Math.round((used/pool)*100):0;
-        var fillColour=pct>=90?'#f87171':pct>=70?'#fbbf24':'#34d399';
-        var poolLabel=pool>0?(used+' / '+pool):''+used+' leases';
-        var pctLabel=pool>0?(' ('+pct+'%)'):'';
-        return'<tr>'+
-          '<td style="font-size:.76rem;font-family:var(--font-mono);color:var(--accent-rx)">'+esc(n.cidr)+'</td>'+
-          '<td class="td-label">'+esc(n.gateway||'\u2014')+'</td>'+
-          '<td class="td-label">'+esc(n.dns||'\u2014')+'</td>'+
-          '<td>'+
-            '<span style="font-size:.72rem;color:var(--text-main)">'+poolLabel+
-            '<span style="color:var(--text-muted)">'+pctLabel+'</span></span>'+
-            (pool>0?'<div class="dhcp-util-bar"><div class="dhcp-util-fill" style="width:'+Math.min(100,pct)+'%;background:'+fillColour+'"></div></div>':'')+'</td>'+
-        '</tr>';
-      }).join('');
-      subnetEl.innerHTML='<table class="dhcp-subnet-table">'+
-        '<thead><tr><th>Subnet</th><th>Gateway</th><th>DNS</th><th>Leases</th></tr></thead>'+
-        '<tbody>'+rows+'</tbody></table>';
+      var rows = nets
+        .map(function (n) {
+          var used = n.leaseCount || 0;
+          var pool = n.poolSize || 0;
+          var pct = pool > 0 ? Math.round((used / pool) * 100) : 0;
+          var fillColour =
+            pct >= 90 ? "#f87171" : pct >= 70 ? "#fbbf24" : "#34d399";
+          var poolLabel =
+            pool > 0 ? used + " / " + pool : "" + used + " leases";
+          var pctLabel = pool > 0 ? " (" + pct + "%)" : "";
+          return (
+            "<tr>" +
+            '<td style="font-size:.76rem;font-family:var(--font-mono);color:var(--accent-rx)">' +
+            esc(n.cidr) +
+            "</td>" +
+            '<td class="td-label">' +
+            esc(n.gateway || "\u2014") +
+            "</td>" +
+            '<td class="td-label">' +
+            esc(n.dns || "\u2014") +
+            "</td>" +
+            "<td>" +
+            '<span style="font-size:.72rem;color:var(--text-main)">' +
+            poolLabel +
+            '<span style="color:var(--text-muted)">' +
+            pctLabel +
+            "</span></span>" +
+            (pool > 0
+              ? '<div class="dhcp-util-bar"><div class="dhcp-util-fill" style="width:' +
+                Math.min(100, pct) +
+                "%;background:" +
+                fillColour +
+                '"></div></div>'
+              : "") +
+            "</td>" +
+            "</tr>"
+          );
+        })
+        .join("");
+      subnetEl.innerHTML =
+        '<table class="dhcp-subnet-table">' +
+        "<thead><tr><th>Subnet</th><th>Gateway</th><th>DNS</th><th>Leases</th></tr></thead>" +
+        "<tbody>" +
+        rows +
+        "</tbody></table>";
     }
   }
 
   // Store pool size so gauge can be re-rendered from leases:list updates
   _dhcpTotalPoolSize = data.totalPoolSize || 0;
-  _dhcpNetworksData  = data;
+  _dhcpNetworksData = data;
   renderDhcpGauge();
 });
 
 function renderDhcpGauge() {
   var totalPool = _dhcpTotalPoolSize;
   var totalUsed = allLeases.length; // live lease count — always current
-  var usedPct   = totalPool > 0 ? Math.round((totalUsed / totalPool) * 100) : 0;
-  var gaugeFill  = $('dhcpGaugeFill');
-  var gaugeTrack = $('dhcpGaugeTrack');
-  var gaugePct   = $('dhcpGaugePct');
+  var usedPct = totalPool > 0 ? Math.round((totalUsed / totalPool) * 100) : 0;
+  var gaugeFill = $("dhcpGaugeFill");
+  var gaugeTrack = $("dhcpGaugeTrack");
+  var gaugePct = $("dhcpGaugePct");
   if (!gaugeFill || !gaugeTrack) return;
   // Semi-circle: centre (100,105), r=72, sweeping 120° from 210° to 330°
-  var cx=100, cy=105, r=72, startDeg=210, totalDeg=120;
+  var cx = 100,
+    cy = 105,
+    r = 72,
+    startDeg = 210,
+    totalDeg = 120;
   function gaugeXY(deg) {
-    var rad = deg * Math.PI / 180;
-    return { x: +(cx + r * Math.cos(rad)).toFixed(2), y: +(cy + r * Math.sin(rad)).toFixed(2) };
+    var rad = (deg * Math.PI) / 180;
+    return {
+      x: +(cx + r * Math.cos(rad)).toFixed(2),
+      y: +(cy + r * Math.sin(rad)).toFixed(2),
+    };
   }
-  var sa = gaugeXY(startDeg), ea = gaugeXY(startDeg + totalDeg);
-  gaugeTrack.setAttribute('d', 'M'+sa.x+','+sa.y+' A'+r+','+r+' 0 0,1 '+ea.x+','+ea.y);
+  var sa = gaugeXY(startDeg),
+    ea = gaugeXY(startDeg + totalDeg);
+  gaugeTrack.setAttribute(
+    "d",
+    "M" +
+      sa.x +
+      "," +
+      sa.y +
+      " A" +
+      r +
+      "," +
+      r +
+      " 0 0,1 " +
+      ea.x +
+      "," +
+      ea.y,
+  );
   var fillDeg = totalDeg * (Math.min(100, usedPct) / 100);
   if (fillDeg > 0.5) {
     var fa = gaugeXY(startDeg + fillDeg);
-    gaugeFill.setAttribute('d', 'M'+sa.x+','+sa.y+' A'+r+','+r+' 0 '+(fillDeg > 180 ? 1 : 0)+',1 '+fa.x+','+fa.y);
+    gaugeFill.setAttribute(
+      "d",
+      "M" +
+        sa.x +
+        "," +
+        sa.y +
+        " A" +
+        r +
+        "," +
+        r +
+        " 0 " +
+        (fillDeg > 180 ? 1 : 0) +
+        ",1 " +
+        fa.x +
+        "," +
+        fa.y,
+    );
   } else {
-    gaugeFill.setAttribute('d', '');
+    gaugeFill.setAttribute("d", "");
   }
-  var gaugeColour = usedPct >= 90 ? '#f87171' : usedPct >= 70 ? '#fbbf24' : '#38bdf8';
-  gaugeFill.setAttribute('stroke', gaugeColour);
-  if (gaugePct) { gaugePct.textContent = totalPool > 0 ? (usedPct + '%') : '—'; gaugePct.setAttribute('fill', gaugeColour); }
+  var gaugeColour =
+    usedPct >= 90 ? "#f87171" : usedPct >= 70 ? "#fbbf24" : "#38bdf8";
+  gaugeFill.setAttribute("stroke", gaugeColour);
+  if (gaugePct) {
+    gaugePct.textContent = totalPool > 0 ? usedPct + "%" : "—";
+    gaugePct.setAttribute("fill", gaugeColour);
+  }
 }
 
-
 // ── Connections ────────────────────────────────────────────────────────────
-var sparkCanvas=$('connSparkCanvas');
-var sparkCtx2d=sparkCanvas?sparkCanvas.getContext('2d'):null;
-function drawSparkline(history){
-  if(!sparkCtx2d||!history||history.length<2)return;
-  var w=sparkCanvas.width,h=sparkCanvas.height;
-  sparkCtx2d.clearRect(0,0,w,h);
-  var vals=history.map(function(p){return p.total;});
-  var maxV=Math.max.apply(null,vals)||1;
+var sparkCanvas = $("connSparkCanvas");
+var sparkCtx2d = sparkCanvas ? sparkCanvas.getContext("2d") : null;
+function drawSparkline(history) {
+  if (!sparkCtx2d || !history || history.length < 2) return;
+  var w = sparkCanvas.width,
+    h = sparkCanvas.height;
+  sparkCtx2d.clearRect(0, 0, w, h);
+  var vals = history.map(function (p) {
+    return p.total;
+  });
+  var maxV = Math.max.apply(null, vals) || 1;
   sparkCtx2d.beginPath();
-  sparkCtx2d.strokeStyle='#38bdf8';sparkCtx2d.lineWidth=1.5;sparkCtx2d.lineJoin='round';
-  for(var i=0;i<vals.length;i++){
-    var x=(i/(vals.length-1))*w,y=h-(vals[i]/maxV)*(h-2)-1;
-    i===0?sparkCtx2d.moveTo(x,y):sparkCtx2d.lineTo(x,y);
+  sparkCtx2d.strokeStyle = "#38bdf8";
+  sparkCtx2d.lineWidth = 1.5;
+  sparkCtx2d.lineJoin = "round";
+  for (var i = 0; i < vals.length; i++) {
+    var x = (i / (vals.length - 1)) * w,
+      y = h - (vals[i] / maxV) * (h - 2) - 1;
+    i === 0 ? sparkCtx2d.moveTo(x, y) : sparkCtx2d.lineTo(x, y);
   }
   sparkCtx2d.stroke();
 }
-function renderProtoBars(pc){
-  if(!protoBars||!pc)return;
-  var total=pc.tcp+pc.udp+pc.icmp+pc.other||1;
-  var items=[{k:'TCP',c:'tcp',v:pc.tcp},{k:'UDP',c:'udp',v:pc.udp},{k:'ICMP',c:'icmp',v:pc.icmp},{k:'Other',c:'other',v:pc.other}];
-  protoBars.innerHTML=items.map(function(it){
-    var pct=Math.round((it.v/total)*100);
-    return'<div class="proto-bar-row"><div class="proto-label">'+it.k+'</div>'+
-      '<div class="proto-track"><div class="proto-fill '+it.c+'" style="width:'+pct+'%"></div></div>'+
-      '<div class="proto-val">'+it.v+'</div></div>';
-  }).join('');
+function renderProtoBars(pc) {
+  if (!protoBars || !pc) return;
+  var total = pc.tcp + pc.udp + pc.icmp + pc.other || 1;
+  var items = [
+    { k: "TCP", c: "tcp", v: pc.tcp },
+    { k: "UDP", c: "udp", v: pc.udp },
+    { k: "ICMP", c: "icmp", v: pc.icmp },
+    { k: "Other", c: "other", v: pc.other },
+  ];
+  protoBars.innerHTML = items
+    .map(function (it) {
+      var pct = Math.round((it.v / total) * 100);
+      return (
+        '<div class="proto-bar-row"><div class="proto-label">' +
+        it.k +
+        "</div>" +
+        '<div class="proto-track"><div class="proto-fill ' +
+        it.c +
+        '" style="width:' +
+        pct +
+        '%"></div></div>' +
+        '<div class="proto-val">' +
+        it.v +
+        "</div></div>"
+      );
+    })
+    .join("");
 }
-function svcBadge(org, cat){
-  if(!org) return '';
-  return '<span class="svc-badge svc-'+(cat||'other')+'">'+esc(org)+'</span>';
+function svcBadge(org, cat) {
+  if (!org) return "";
+  return (
+    '<span class="svc-badge svc-' +
+    (cat || "other") +
+    '">' +
+    esc(org) +
+    "</span>"
+  );
 }
-var _connSrcFp='', _connDstFp='', _connProtoFp='';
-var _pendingConnData=null, _connRafId=null;
-function _flushConnUpdate(){
-  _connRafId=null;
-  var data=_pendingConnData; if(!data) return;
-  _pendingConnData=null;
-  var srcFp=JSON.stringify(data.topSources.map(function(x){return{ip:x.ip,count:x.count};}));
-  if(srcFp!==_connSrcFp){
-    _connSrcFp=srcFp;
-    if(data.topSources&&data.topSources.length){
-      topSources.innerHTML=data.topSources.map(function(s){
-        return'<div class="top-row"><div><div class="top-name">'+esc(s.name)+'</div><div class="top-sub">'+esc(s.ip)+(s.mac?' '+DOT+' '+esc(s.mac):'')+' </div></div><div class="top-count">'+s.count+'</div></div>';
-      }).join('');
-    }else{topSources.innerHTML='<div class="empty-state">\u2014</div>';}
+var _connSrcFp = "",
+  _connDstFp = "",
+  _connProtoFp = "";
+var _pendingConnData = null,
+  _connRafId = null;
+function _flushConnUpdate() {
+  _connRafId = null;
+  var data = _pendingConnData;
+  if (!data) return;
+  _pendingConnData = null;
+  var srcFp = JSON.stringify(
+    data.topSources.map(function (x) {
+      return { ip: x.ip, count: x.count };
+    }),
+  );
+  if (srcFp !== _connSrcFp) {
+    _connSrcFp = srcFp;
+    if (data.topSources && data.topSources.length) {
+      topSources.innerHTML = data.topSources
+        .map(function (s) {
+          return (
+            '<div class="top-row"><div><div class="top-name">' +
+            esc(s.name) +
+            '</div><div class="top-sub">' +
+            esc(s.ip) +
+            (s.mac ? " " + DOT + " " + esc(s.mac) : "") +
+            ' </div></div><div class="top-count">' +
+            s.count +
+            "</div></div>"
+          );
+        })
+        .join("");
+    } else {
+      topSources.innerHTML = '<div class="empty-state">\u2014</div>';
+    }
   }
-  var dstFp=JSON.stringify(data.topDestinations.map(function(x){return{key:x.key,count:x.count,country:x.country};}));
-  if(dstFp!==_connDstFp){
-    _connDstFp=dstFp;
-    if(data.topDestinations&&data.topDestinations.length){
-      topDests.innerHTML=data.topDestinations.map(function(d){
-        var flag='',geoLabel='';
-        if(d.country){
-          flag=d.country.split('').map(function(c){return String.fromCodePoint(0x1F1E6-65+c.toUpperCase().charCodeAt(0));}).join('');
-          geoLabel=flag+(d.city?' '+esc(d.city)+' · '+esc(d.country):'');
-        }
-        return'<div class="top-row">'+
-          '<div style="flex:1;min-width:0;overflow:hidden">'+
-            '<div style="display:flex;align-items:center;gap:0;overflow:hidden">'+
-              '<span class="top-name text-truncate has-ip-tip" data-ip="'+esc(d.key)+
-                '" data-org="'+(d.org?esc(d.org):'')+
-                '" data-cat="'+(d.cat||'')+'">'+ esc(d.key)+'</span>'+
-              (d.org?svcBadge(d.org,d.cat):'')+
-            '</div>'+
-          '</div>'+
-          (geoLabel?'<div class="top-geo">'+geoLabel+'</div>':'')+
-          '<div class="top-count">'+d.count+'</div>'+
-        '</div>';
-      }).join('');
-    }else{topDests.innerHTML='<div class="empty-state">\u2014</div>';}
+  var dstFp = JSON.stringify(
+    data.topDestinations.map(function (x) {
+      return { key: x.key, count: x.count, country: x.country };
+    }),
+  );
+  if (dstFp !== _connDstFp) {
+    _connDstFp = dstFp;
+    if (data.topDestinations && data.topDestinations.length) {
+      topDests.innerHTML = data.topDestinations
+        .map(function (d) {
+          var flag = "",
+            geoLabel = "";
+          if (d.country) {
+            flag = d.country
+              .split("")
+              .map(function (c) {
+                return String.fromCodePoint(
+                  0x1f1e6 - 65 + c.toUpperCase().charCodeAt(0),
+                );
+              })
+              .join("");
+            geoLabel =
+              flag + (d.city ? " " + esc(d.city) + " · " + esc(d.country) : "");
+          }
+          return (
+            '<div class="top-row">' +
+            '<div style="flex:1;min-width:0;overflow:hidden">' +
+            '<div style="display:flex;align-items:center;gap:0;overflow:hidden">' +
+            '<span class="top-name text-truncate has-ip-tip" data-ip="' +
+            esc(d.key) +
+            '" data-org="' +
+            (d.org ? esc(d.org) : "") +
+            '" data-cat="' +
+            (d.cat || "") +
+            '">' +
+            esc(d.key) +
+            "</span>" +
+            (d.org ? svcBadge(d.org, d.cat) : "") +
+            "</div>" +
+            "</div>" +
+            (geoLabel ? '<div class="top-geo">' + geoLabel + "</div>" : "") +
+            '<div class="top-count">' +
+            d.count +
+            "</div>" +
+            "</div>"
+          );
+        })
+        .join("");
+    } else {
+      topDests.innerHTML = '<div class="empty-state">\u2014</div>';
+    }
   }
 }
-socket.on('conn:update',function(data){
-  connTotal.textContent=data.total;
-  var connNavBadge=$("connNavBadge"); if(connNavBadge) connNavBadge.textContent=data.total;
-  connHistory.push({ts:data.ts,total:data.total});
-  if(connHistory.length>MAX_CONN_HIST)connHistory.shift();
+socket.on("conn:update", function (data) {
+  connTotal.textContent = data.total;
+  var connNavBadge = $("connNavBadge");
+  if (connNavBadge) connNavBadge.textContent = data.total;
+  connHistory.push({ ts: data.ts, total: data.total });
+  if (connHistory.length > MAX_CONN_HIST) connHistory.shift();
   drawSparkline(connHistory);
-  var protoFp=JSON.stringify(data.protoCounts);
-  if(protoFp!==_connProtoFp){ _connProtoFp=protoFp; renderProtoBars(data.protoCounts); }
+  var protoFp = JSON.stringify(data.protoCounts);
+  if (protoFp !== _connProtoFp) {
+    _connProtoFp = protoFp;
+    renderProtoBars(data.protoCounts);
+  }
   // Exclude ts — data object shape is stable between ticks when nothing changes
-  _pendingConnData=data;
-  if(!_connRafId) _connRafId=requestAnimationFrame(_flushConnUpdate);
+  _pendingConnData = data;
+  if (!_connRafId) _connRafId = requestAnimationFrame(_flushConnUpdate);
 });
 
 // ── Top Talkers ────────────────────────────────────────────────────────────
-socket.on('talkers:update',function(data){
-  var devices=data.devices||[];
-  if(!devices.length){if(lastTalkers)return;talkersTable.innerHTML='<tr><td colspan="4" class="empty-state">No devices</td></tr>';return;}
-  lastTalkers=devices;
-  talkersTable.innerHTML=devices.map(function(d){
-    return'<tr><td>'+esc(d.name||'\u2014')+'</td><td style="color:var(--text-muted)">'+esc(d.mac||'\u2014')+'</td>'+
-      '<td class="text-end" style="color:var(--accent-rx)">'+fmtMbps(d.rx_mbps)+'</td>'+
-      '<td class="text-end" style="color:var(--accent-tx)">'+fmtMbps(d.tx_mbps)+'</td></tr>';
-  }).join('');
+socket.on("talkers:update", function (data) {
+  var devices = data.devices || [];
+  if (!devices.length) {
+    if (lastTalkers) return;
+    talkersTable.innerHTML =
+      '<tr><td colspan="4" class="empty-state">No devices</td></tr>';
+    return;
+  }
+  lastTalkers = devices;
+  talkersTable.innerHTML = devices
+    .map(function (d) {
+      return (
+        "<tr><td>" +
+        esc(d.name || "\u2014") +
+        '</td><td style="color:var(--text-muted)">' +
+        esc(d.mac || "\u2014") +
+        "</td>" +
+        '<td class="text-end" style="color:var(--accent-rx)">' +
+        fmtMbps(d.rx_mbps) +
+        "</td>" +
+        '<td class="text-end" style="color:var(--accent-tx)">' +
+        fmtMbps(d.tx_mbps) +
+        "</td></tr>"
+      );
+    })
+    .join("");
 });
 
 // ── Interface Status ───────────────────────────────────────────────────────
-var _ifacePeaks   = {};
+var _ifacePeaks = {};
 // Per-interface ring buffer of combined rx+tx Mbps samples for sparkline.
 // 30 samples at ~5 s poll interval = ~2.5 min of trend history.
 var _ifaceHistory = {};
 var IFACE_SPARK_LEN = 30;
 
 function ifaceSparkSvg(history) {
-  if (!history || history.length < 2) return '';
-  var w = 56, h = 18, pad = 1.5;
+  if (!history || history.length < 2) return "";
+  var w = 56,
+    h = 18,
+    pad = 1.5;
   var min = 0; // always baseline at zero so rising traffic is visually obvious
   var max = Math.max.apply(null, history) || 1;
-  var pts = history.map(function(v, i) {
+  var pts = history.map(function (v, i) {
     var x = pad + (i / (history.length - 1)) * (w - pad * 2);
     var y = h - pad - (v / max) * (h - pad * 2);
-    return x.toFixed(1) + ',' + y.toFixed(1);
+    return x.toFixed(1) + "," + y.toFixed(1);
   });
-  return '<svg class="iface-spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-    '<polyline points="' + pts.join(' ') + '" fill="none" stroke="rgba(56,189,248,.6)" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>' +
-    '</svg>';
+  return (
+    '<svg class="iface-spark" width="' +
+    w +
+    '" height="' +
+    h +
+    '" viewBox="0 0 ' +
+    w +
+    " " +
+    h +
+    '">' +
+    '<polyline points="' +
+    pts.join(" ") +
+    '" fill="none" stroke="rgba(56,189,248,.6)" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>' +
+    "</svg>"
+  );
 }
 
 function ifaceRateRow(name, dir, mbps, peak) {
   var pct = peak > 0 ? Math.min(100, (mbps / peak) * 100) : 0;
   var isZero = !mbps || mbps === 0;
-  var valCls = isZero ? 'zero' : dir;
-  var label = dir === 'rx' ? '\u2193' : '\u2191';
-  return '<div class="iface-rate-row">' +
-    '<span class="iface-rate-label">' + label + '</span>' +
-    '<div class="iface-rate-bar-wrap"><div class="iface-rate-bar ' + dir + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
-    '<span class="iface-rate-val ' + valCls + '">' + fmtMbps(mbps) + '</span>' +
-    '</div>';
+  var valCls = isZero ? "zero" : dir;
+  var label = dir === "rx" ? "\u2193" : "\u2191";
+  return (
+    '<div class="iface-rate-row">' +
+    '<span class="iface-rate-label">' +
+    label +
+    "</span>" +
+    '<div class="iface-rate-bar-wrap"><div class="iface-rate-bar ' +
+    dir +
+    '" style="width:' +
+    pct.toFixed(1) +
+    '%"></div></div>' +
+    '<span class="iface-rate-val ' +
+    valCls +
+    '">' +
+    fmtMbps(mbps) +
+    "</span>" +
+    "</div>"
+  );
 }
 
-socket.on('ifstatus:update',function(data){
-  var ifaces=data.interfaces||[];
-  var nb=$('ifacesNavBadge');if(nb){nb.textContent=ifaces.length||'';}
-  if(ifaceCount){ifaceCount.textContent=ifaces.length;ifaceCount.className='card-badge'+(ifaces.length>0?' active-blue':'');}
-  var wiredUp=ifaces.filter(function(i){return i.running&&!i.disabled&&i.type==='ether';});
-  var ndWired=$('ndWiredCount');if(ndWired)ndWired.textContent=wiredUp.length;
-  if(!ifaces.length){if(ifaceGrid)ifaceGrid.innerHTML='<div class="empty-state">No interfaces</div>';return;}
-  if(!ifaceGrid)return;
+socket.on("ifstatus:update", function (data) {
+  var ifaces = data.interfaces || [];
+  var nb = $("ifacesNavBadge");
+  if (nb) {
+    nb.textContent = ifaces.length || "";
+  }
+  if (ifaceCount) {
+    ifaceCount.textContent = ifaces.length;
+    ifaceCount.className =
+      "card-badge" + (ifaces.length > 0 ? " active-blue" : "");
+  }
+  var wiredUp = ifaces.filter(function (i) {
+    return i.running && !i.disabled && i.type === "ether";
+  });
+  var ndWired = $("ndWiredCount");
+  if (ndWired) ndWired.textContent = wiredUp.length;
+  if (!ifaces.length) {
+    if (ifaceGrid)
+      ifaceGrid.innerHTML = '<div class="empty-state">No interfaces</div>';
+    return;
+  }
+  if (!ifaceGrid) return;
 
-  ifaces.forEach(function(i) {
+  ifaces.forEach(function (i) {
     if (!_ifacePeaks[i.name]) _ifacePeaks[i.name] = { rx: 0, tx: 0 };
     var p = _ifacePeaks[i.name];
     p.rx = Math.max(i.rxMbps || 0, p.rx * 0.995);
@@ -545,25 +1126,39 @@ socket.on('ifstatus:update',function(data){
     // Append combined rx+tx to sparkline history buffer
     if (!_ifaceHistory[i.name]) _ifaceHistory[i.name] = [];
     _ifaceHistory[i.name].push((i.rxMbps || 0) + (i.txMbps || 0));
-    if (_ifaceHistory[i.name].length > IFACE_SPARK_LEN) _ifaceHistory[i.name].shift();
+    if (_ifaceHistory[i.name].length > IFACE_SPARK_LEN)
+      _ifaceHistory[i.name].shift();
   });
 
-  ifaceGrid.innerHTML=ifaces.map(function(i){
-    var cls=i.disabled?'disabled':i.running?'up':'down';
-    var dotCls=i.disabled?'dis':i.running?'up':'down';
-    var ipStr=i.ips&&i.ips.length?i.ips[0]:'';
-    var p = _ifacePeaks[i.name] || { rx: 1, tx: 1 };
-    return'<div class="iface-tile '+cls+'">'+
-      ifaceSparkSvg(_ifaceHistory[i.name]||[])+
-      '<div class="iface-name"><span class="iface-dot '+dotCls+'"></span>'+esc(i.name)+'</div>'+
-      '<div class="iface-type">'+esc(i.type)+(i.comment?' \u00b7 '+esc(i.comment):'')+'</div>'+
-      (ipStr?'<div class="iface-ip">'+esc(ipStr)+'</div>':'')+
-      '<div class="iface-rates">'+
-        ifaceRateRow(i.name,'rx',i.rxMbps||0,p.rx)+
-        ifaceRateRow(i.name,'tx',i.txMbps||0,p.tx)+
-      '</div>'+
-      '</div>';
-  }).join('');
+  ifaceGrid.innerHTML = ifaces
+    .map(function (i) {
+      var cls = i.disabled ? "disabled" : i.running ? "up" : "down";
+      var dotCls = i.disabled ? "dis" : i.running ? "up" : "down";
+      var ipStr = i.ips && i.ips.length ? i.ips[0] : "";
+      var p = _ifacePeaks[i.name] || { rx: 1, tx: 1 };
+      return (
+        '<div class="iface-tile ' +
+        cls +
+        '">' +
+        ifaceSparkSvg(_ifaceHistory[i.name] || []) +
+        '<div class="iface-name"><span class="iface-dot ' +
+        dotCls +
+        '"></span>' +
+        esc(i.name) +
+        "</div>" +
+        '<div class="iface-type">' +
+        esc(i.type) +
+        (i.comment ? " \u00b7 " + esc(i.comment) : "") +
+        "</div>" +
+        (ipStr ? '<div class="iface-ip">' + esc(ipStr) + "</div>" : "") +
+        '<div class="iface-rates">' +
+        ifaceRateRow(i.name, "rx", i.rxMbps || 0, p.rx) +
+        ifaceRateRow(i.name, "tx", i.txMbps || 0, p.tx) +
+        "</div>" +
+        "</div>"
+      );
+    })
+    .join("");
   renderIfTypes(ifaces);
   renderIfPorts(ifaces);
 });
@@ -571,250 +1166,424 @@ socket.on('ifstatus:update',function(data){
 // ── Interface Types card ───────────────────────────────────────────────────
 // Colour palette for type badges — cycles for types beyond the named set
 var IF_TYPE_COLOURS = {
-  ether:      'rgba(56,189,248,.9)',
-  wlan:       'rgba(167,139,250,.9)',
-  bridge:     'rgba(52,211,153,.9)',
-  vlan:       'rgba(251,191,36,.9)',
-  wireguard:  'rgba(99,190,130,.9)',
-  'pppoe-client':'rgba(251,113,133,.9)',
-  lte:        'rgba(245,159,0,.9)',
-  loopback:   'rgba(99,130,190,.6)',
+  ether: "rgba(56,189,248,.9)",
+  wlan: "rgba(167,139,250,.9)",
+  bridge: "rgba(52,211,153,.9)",
+  vlan: "rgba(251,191,36,.9)",
+  wireguard: "rgba(99,190,130,.9)",
+  "pppoe-client": "rgba(251,113,133,.9)",
+  lte: "rgba(245,159,0,.9)",
+  loopback: "rgba(99,130,190,.6)",
 };
-var IF_TYPE_FALLBACKS = ['rgba(56,189,248,.7)','rgba(167,139,250,.7)','rgba(52,211,153,.7)',
-  'rgba(251,191,36,.7)','rgba(251,113,133,.7)','rgba(245,159,0,.7)'];
+var IF_TYPE_FALLBACKS = [
+  "rgba(56,189,248,.7)",
+  "rgba(167,139,250,.7)",
+  "rgba(52,211,153,.7)",
+  "rgba(251,191,36,.7)",
+  "rgba(251,113,133,.7)",
+  "rgba(245,159,0,.7)",
+];
 
 function renderIfTypes(ifaces) {
-  var panel = $('ifTypeGrid'); if (!panel) return;
+  var panel = $("ifTypeGrid");
+  if (!panel) return;
   // Count by type, preserve insertion order
-  var counts = {}, order = [];
-  ifaces.forEach(function(i) {
-    var t = i.type || 'ether';
-    if (!counts[t]) { counts[t] = 0; order.push(t); }
+  var counts = {},
+    order = [];
+  ifaces.forEach(function (i) {
+    var t = i.type || "ether";
+    if (!counts[t]) {
+      counts[t] = 0;
+      order.push(t);
+    }
     counts[t]++;
   });
   if (!order.length) {
-    panel.innerHTML = '<div class="if-type-item"><span class="if-type-label">—</span><span class="if-type-count">—</span></div>';
+    panel.innerHTML =
+      '<div class="if-type-item"><span class="if-type-label">—</span><span class="if-type-count">—</span></div>';
     return;
   }
   var fallbackIdx = 0;
-  panel.innerHTML = order.map(function(t) {
-    var col = IF_TYPE_COLOURS[t] || IF_TYPE_FALLBACKS[fallbackIdx++ % IF_TYPE_FALLBACKS.length];
-    return '<div class="if-type-item">'+
-      '<span class="if-type-label" title="'+esc(t)+'">'+esc(t)+'</span>'+
-      '<span class="if-type-count" style="color:'+col+'">'+counts[t]+'</span>'+
-    '</div>';
-  }).join('');
+  panel.innerHTML = order
+    .map(function (t) {
+      var col =
+        IF_TYPE_COLOURS[t] ||
+        IF_TYPE_FALLBACKS[fallbackIdx++ % IF_TYPE_FALLBACKS.length];
+      return (
+        '<div class="if-type-item">' +
+        '<span class="if-type-label" title="' +
+        esc(t) +
+        '">' +
+        esc(t) +
+        "</span>" +
+        '<span class="if-type-count" style="color:' +
+        col +
+        '">' +
+        counts[t] +
+        "</span>" +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
 // ── Ports panel ────────────────────────────────────────────────────────────
 // Renders an ethernet port SVG for every ether-type interface.
 // Port size scales down when there are many ports so they all fit in one row.
 function renderIfPorts(ifaces) {
-  var panel = $('ifPortsPanel'); if (!panel) return;
-  var ethers = ifaces.filter(function(i){ return i.type === 'ether'; });
+  var panel = $("ifPortsPanel");
+  if (!panel) return;
+  var ethers = ifaces.filter(function (i) {
+    return i.type === "ether";
+  });
   if (!ethers.length) {
-    panel.innerHTML = '<div style="font-size:.72rem;color:var(--text-muted)">No ethernet ports</div>';
+    panel.innerHTML =
+      '<div style="font-size:.72rem;color:var(--text-muted)">No ethernet ports</div>';
     return;
   }
   // Scale port size: fits up to ~20 ports at full size, shrinks beyond that
   var n = ethers.length;
   var sz = n <= 8 ? 44 : n <= 16 ? 36 : n <= 24 ? 30 : 26;
-  panel.innerHTML = ethers.map(function(i) {
-    var state = i.disabled ? 'dis' : i.running ? 'up' : 'down';
-    return '<div class="if-port-item" data-state="'+state+'" title="'+esc(i.name)+(i.ips&&i.ips.length?' — '+esc(i.ips[0]):'')+(i.running?' (up)':i.disabled?' (disabled)':' (down)')+'">' +
-      portSvg(sz) +
-      '<span class="if-port-label">'+esc(i.name)+'</span>'+
-    '</div>';
-  }).join('');
+  panel.innerHTML = ethers
+    .map(function (i) {
+      var state = i.disabled ? "dis" : i.running ? "up" : "down";
+      return (
+        '<div class="if-port-item" data-state="' +
+        state +
+        '" title="' +
+        esc(i.name) +
+        (i.ips && i.ips.length ? " — " + esc(i.ips[0]) : "") +
+        (i.running ? " (up)" : i.disabled ? " (disabled)" : " (down)") +
+        '">' +
+        portSvg(sz) +
+        '<span class="if-port-label">' +
+        esc(i.name) +
+        "</span>" +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
 function portSvg(sz) {
   // Ethernet port — RJ-45 front view
   // Outer housing, inner socket recess, two clip tabs top and bottom,
   // 8 contact pins across the bottom of the socket, one LED dot top-right.
-  var w = sz, h = Math.round(sz * 1.1);
-  var rx = Math.max(2, Math.round(sz * 0.09));        // corner radius
-  var sox = Math.round(w * 0.15);                     // socket inset x
-  var sow = w - sox * 2;                              // socket width
-  var soy = Math.round(h * 0.22);                     // socket inset y top
-  var soh = Math.round(h * 0.58);                     // socket height
-  var pinW = Math.max(1, Math.round(sow / 10));       // each pin width
-  var pinH = Math.max(3, Math.round(h * 0.16));       // pin height
-  var pinY = soy + soh - pinH;                        // pins sit at socket bottom
-  var pinGap = (sow - 8 * pinW) / 9;                 // space between pins
-  var ledR = Math.max(2, Math.round(sz * 0.07));      // LED radius
+  var w = sz,
+    h = Math.round(sz * 1.1);
+  var rx = Math.max(2, Math.round(sz * 0.09)); // corner radius
+  var sox = Math.round(w * 0.15); // socket inset x
+  var sow = w - sox * 2; // socket width
+  var soy = Math.round(h * 0.22); // socket inset y top
+  var soh = Math.round(h * 0.58); // socket height
+  var pinW = Math.max(1, Math.round(sow / 10)); // each pin width
+  var pinH = Math.max(3, Math.round(h * 0.16)); // pin height
+  var pinY = soy + soh - pinH; // pins sit at socket bottom
+  var pinGap = (sow - 8 * pinW) / 9; // space between pins
+  var ledR = Math.max(2, Math.round(sz * 0.07)); // LED radius
   var ledX = w - Math.round(sz * 0.14);
   var ledY = Math.round(sz * 0.11);
   // Build 8 pin rects
-  var pins = '';
+  var pins = "";
   for (var p = 0; p < 8; p++) {
     var px = sox + pinGap + p * (pinW + pinGap);
-    pins += '<rect x="'+px.toFixed(1)+'" y="'+pinY+'" width="'+pinW+'" height="'+pinH+'" rx="0.5" fill="rgba(200,215,240,.35)"/>';
+    pins +=
+      '<rect x="' +
+      px.toFixed(1) +
+      '" y="' +
+      pinY +
+      '" width="' +
+      pinW +
+      '" height="' +
+      pinH +
+      '" rx="0.5" fill="rgba(200,215,240,.35)"/>';
   }
-  return '<svg class="if-port-svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">'+
+  return (
+    '<svg class="if-port-svg" width="' +
+    w +
+    '" height="' +
+    h +
+    '" viewBox="0 0 ' +
+    w +
+    " " +
+    h +
+    '" xmlns="http://www.w3.org/2000/svg">' +
     // Outer housing
-    '<rect class="port-body" x="0.5" y="0.5" width="'+(w-1)+'" height="'+(h-1)+'" rx="'+rx+'" stroke-width="1.5" fill-opacity="1"/>'+
+    '<rect class="port-body" x="0.5" y="0.5" width="' +
+    (w - 1) +
+    '" height="' +
+    (h - 1) +
+    '" rx="' +
+    rx +
+    '" stroke-width="1.5" fill-opacity="1"/>' +
     // Socket recess (darker cutout)
-    '<rect x="'+sox+'" y="'+soy+'" width="'+sow+'" height="'+soh+'" rx="2" fill="rgba(5,8,16,.5)" stroke="rgba(99,130,190,.2)" stroke-width="0.8"/>'+
+    '<rect x="' +
+    sox +
+    '" y="' +
+    soy +
+    '" width="' +
+    sow +
+    '" height="' +
+    soh +
+    '" rx="2" fill="rgba(5,8,16,.5)" stroke="rgba(99,130,190,.2)" stroke-width="0.8"/>' +
     // 8 contact pins
-    pins+
+    pins +
     // LED indicator dot
-    '<circle class="port-led" cx="'+ledX+'" cy="'+ledY+'" r="'+ledR+'"/>'+
-  '</svg>';
+    '<circle class="port-led" cx="' +
+    ledX +
+    '" cy="' +
+    ledY +
+    '" r="' +
+    ledR +
+    '"/>' +
+    "</svg>"
+  );
 }
 
 // ── Wireless ───────────────────────────────────────────────────────────────
 // ── Wireless ───────────────────────────────────────────────────────────────
-(function(){
+(function () {
   var _wlClients = [];
-  var _wlSort    = 'signal';
+  var _wlSort = "signal";
 
-  function sigQuality(dbm){
-    if(dbm>=-55) return'<span style="color:rgba(52,211,153,.9)">Excellent</span>';
-    if(dbm>=-65) return'<span style="color:rgba(56,189,248,.9)">Good</span>';
-    if(dbm>=-75) return'<span style="color:rgba(251,191,36,.9)">Fair</span>';
-    return'<span style="color:rgba(248,113,113,.9)">Poor</span>';
+  function sigQuality(dbm) {
+    if (dbm >= -55)
+      return '<span style="color:rgba(52,211,153,.9)">Excellent</span>';
+    if (dbm >= -65)
+      return '<span style="color:rgba(56,189,248,.9)">Good</span>';
+    if (dbm >= -75)
+      return '<span style="color:rgba(251,191,36,.9)">Fair</span>';
+    return '<span style="color:rgba(248,113,113,.9)">Poor</span>';
   }
 
-  function parseTxRateNum(raw){
-    if(!raw) return 0;
-    var s=String(raw).trim();
-    var m=s.match(/([\d.]+)\s*(G|M|K)/i);
-    if(!m) return 0;
-    var v=parseFloat(m[1]), u=m[2].toUpperCase();
-    return u==='G'?v*1000:u==='K'?v/1000:v;
+  function parseTxRateNum(raw) {
+    if (!raw) return 0;
+    var s = String(raw).trim();
+    var m = s.match(/([\d.]+)\s*(G|M|K)/i);
+    if (!m) return 0;
+    var v = parseFloat(m[1]),
+      u = m[2].toUpperCase();
+    return u === "G" ? v * 1000 : u === "K" ? v / 1000 : v;
   }
 
-  function uptimeToSecs(u){
-    if(!u) return 0;
-    var total=0, m;
-    if((m=u.match(/(\d+)w/))) total+=parseInt(m[1])*604800;
-    if((m=u.match(/(\d+)d/))) total+=parseInt(m[1])*86400;
-    if((m=u.match(/(\d+)h/))) total+=parseInt(m[1])*3600;
-    if((m=u.match(/(\d+)m/))) total+=parseInt(m[1])*60;
-    if((m=u.match(/(\d+)s/))) total+=parseInt(m[1]);
+  function uptimeToSecs(u) {
+    if (!u) return 0;
+    var total = 0,
+      m;
+    if ((m = u.match(/(\d+)w/))) total += parseInt(m[1]) * 604800;
+    if ((m = u.match(/(\d+)d/))) total += parseInt(m[1]) * 86400;
+    if ((m = u.match(/(\d+)h/))) total += parseInt(m[1]) * 3600;
+    if ((m = u.match(/(\d+)m/))) total += parseInt(m[1]) * 60;
+    if ((m = u.match(/(\d+)s/))) total += parseInt(m[1]);
     return total;
   }
 
-  function bandBadge(band){
-    if(!band) return'';
-    var cls=band==='5GHz'?'wl-band-5':band==='6GHz'?'wl-band-6':'wl-band-24';
-    return'<span class="wl-band '+cls+'">'+band+'</span>';
+  function bandBadge(band) {
+    if (!band) return "";
+    var cls =
+      band === "5GHz"
+        ? "wl-band-5"
+        : band === "6GHz"
+          ? "wl-band-6"
+          : "wl-band-24";
+    return '<span class="wl-band ' + cls + '">' + band + "</span>";
   }
 
-  function sortClients(clients, key){
-    var c=clients.slice();
-    if(key==='signal') c.sort(function(a,b){return b.signal-a.signal;});
-    else if(key==='txRate') c.sort(function(a,b){return parseTxRateNum(b.txRate)-parseTxRateNum(a.txRate);});
-    else if(key==='uptime') c.sort(function(a,b){return uptimeToSecs(b.uptime)-uptimeToSecs(a.uptime);});
-    else if(key==='name') c.sort(function(a,b){return(a.name||a.mac).localeCompare(b.name||b.mac);});
+  function sortClients(clients, key) {
+    var c = clients.slice();
+    if (key === "signal")
+      c.sort(function (a, b) {
+        return b.signal - a.signal;
+      });
+    else if (key === "txRate")
+      c.sort(function (a, b) {
+        return parseTxRateNum(b.txRate) - parseTxRateNum(a.txRate);
+      });
+    else if (key === "uptime")
+      c.sort(function (a, b) {
+        return uptimeToSecs(b.uptime) - uptimeToSecs(a.uptime);
+      });
+    else if (key === "name")
+      c.sort(function (a, b) {
+        return (a.name || a.mac).localeCompare(b.name || b.mac);
+      });
     return c;
   }
 
-  function renderWireless(){
-    if(!wirelessTable) return;
-    var clients=sortClients(_wlClients, _wlSort);
-    if(!clients.length){
-      wirelessTable.innerHTML='<tr><td colspan="6" class="empty-state">No wireless clients</td></tr>';
+  function renderWireless() {
+    if (!wirelessTable) return;
+    var clients = sortClients(_wlClients, _wlSort);
+    if (!clients.length) {
+      wirelessTable.innerHTML =
+        '<tr><td colspan="6" class="empty-state">No wireless clients</td></tr>';
       return;
     }
     // Group by interface
-    var groups={}, order=[];
-    clients.forEach(function(c){
-      var key=c.iface||'unknown';
-      if(!groups[key]){ groups[key]={iface:key,ssid:c.ssid,clients:[]}; order.push(key); }
+    var groups = {},
+      order = [];
+    clients.forEach(function (c) {
+      var key = c.iface || "unknown";
+      if (!groups[key]) {
+        groups[key] = { iface: key, ssid: c.ssid, clients: [] };
+        order.push(key);
+      }
       groups[key].clients.push(c);
     });
-    var rows='';
-    order.forEach(function(key){
-      var g=groups[key];
-      var multiGroup=order.length>1;
-      if(multiGroup){
-        rows+='<tr class="wl-group-row"><td colspan="6">'+
-          '<span class="wl-group-label">'+esc(g.iface)+'</span>'+
-          (g.ssid?'<span class="wl-group-sub">'+esc(g.ssid)+'</span>':'')+
-          '<span class="wl-group-sub">'+g.clients.length+' client'+(g.clients.length!==1?'s':'')+'</span>'+
-        '</td></tr>';
+    var rows = "";
+    order.forEach(function (key) {
+      var g = groups[key];
+      var multiGroup = order.length > 1;
+      if (multiGroup) {
+        rows +=
+          '<tr class="wl-group-row"><td colspan="6">' +
+          '<span class="wl-group-label">' +
+          esc(g.iface) +
+          "</span>" +
+          (g.ssid
+            ? '<span class="wl-group-sub">' + esc(g.ssid) + "</span>"
+            : "") +
+          '<span class="wl-group-sub">' +
+          g.clients.length +
+          " client" +
+          (g.clients.length !== 1 ? "s" : "") +
+          "</span>" +
+          "</td></tr>";
       }
-      g.clients.forEach(function(c){
-        var sig=parseInt(c.signal,10)||0;
-        var txMbps=parseTxRateNum(c.txRate);
-        var idle=false;
-        var ipStr=c.ip?'<div style="font-size:.62rem;color:var(--accent-rx)">'+esc(c.ip)+'</div>':'';
-        var macStr='<div style="font-size:.6rem;color:var(--text-muted)">'+esc(c.mac)+'</div>';
-        rows+='<tr'+(idle?' class="wl-idle"':'')+'>'+
-          '<td>'+
-            '<div style="font-weight:600;font-size:.78rem">'+esc(c.name||c.mac)+
-              (idle?'<span class="wl-idle-tag">idle</span>':'')+
-            '</div>'+
-            ipStr+macStr+
-          '</td>'+
-          '<td class="wl-col-iface" style="color:var(--text-muted);font-size:.73rem">'+esc(c.iface||'\u2014')+'</td>'+
-          '<td>'+bandBadge(c.band)+'</td>'+
-          '<td class="text-end">'+
-            signalBars(sig)+
-            '<span style="font-size:.68rem;color:var(--text-muted);margin-left:.3rem">'+sig+' dBm</span>'+
-            '<div style="font-size:.62rem;margin-top:.1rem">'+sigQuality(sig)+'</div>'+
-          '</td>'+
-          '<td>'+
-            '<div class="wl-rate">'+esc(parseTxRate(c.txRate))+'</div>'+
-            (c.rxRate?'<div class="wl-rate-rx">\u2191 '+esc(parseTxRate(c.rxRate))+'</div>':'')+
-          '</td>'+
-          '<td class="wl-col-uptime" style="color:var(--text-muted);font-size:.73rem">'+esc(c.uptime||'\u2014')+'</td>'+
-        '</tr>';
+      g.clients.forEach(function (c) {
+        var sig = parseInt(c.signal, 10) || 0;
+        var txMbps = parseTxRateNum(c.txRate);
+        var idle = false;
+        var ipStr = c.ip
+          ? '<div style="font-size:.62rem;color:var(--accent-rx)">' +
+            esc(c.ip) +
+            "</div>"
+          : "";
+        var macStr =
+          '<div style="font-size:.6rem;color:var(--text-muted)">' +
+          esc(c.mac) +
+          "</div>";
+        rows +=
+          "<tr" +
+          (idle ? ' class="wl-idle"' : "") +
+          ">" +
+          "<td>" +
+          '<div style="font-weight:600;font-size:.78rem">' +
+          esc(c.name || c.mac) +
+          (idle ? '<span class="wl-idle-tag">idle</span>' : "") +
+          "</div>" +
+          ipStr +
+          macStr +
+          "</td>" +
+          '<td class="wl-col-iface" style="color:var(--text-muted);font-size:.73rem">' +
+          esc(c.iface || "\u2014") +
+          "</td>" +
+          "<td>" +
+          bandBadge(c.band) +
+          "</td>" +
+          '<td class="text-end">' +
+          signalBars(sig) +
+          '<span style="font-size:.68rem;color:var(--text-muted);margin-left:.3rem">' +
+          sig +
+          " dBm</span>" +
+          '<div style="font-size:.62rem;margin-top:.1rem">' +
+          sigQuality(sig) +
+          "</div>" +
+          "</td>" +
+          "<td>" +
+          '<div class="wl-rate">' +
+          esc(parseTxRate(c.txRate)) +
+          "</div>" +
+          (c.rxRate
+            ? '<div class="wl-rate-rx">\u2191 ' +
+              esc(parseTxRate(c.rxRate)) +
+              "</div>"
+            : "") +
+          "</td>" +
+          '<td class="wl-col-uptime" style="color:var(--text-muted);font-size:.73rem">' +
+          esc(c.uptime || "\u2014") +
+          "</td>" +
+          "</tr>";
       });
     });
-    wirelessTable.innerHTML=rows;
+    wirelessTable.innerHTML = rows;
   }
 
-  socket.on('wireless:update',function(data){
-    _wlClients=data.clients||[];
-    var ndWC=$('ndWirelessCount'); if(ndWC) ndWC.textContent=_wlClients.length;
-    wirelessTabBadge.textContent=_wlClients.length; wirelessTabBadge.className='card-badge'+(_wlClients.length>0?' active-blue':'');
-    wirelessNavBadge.textContent=_wlClients.length;
+  socket.on("wireless:update", function (data) {
+    _wlClients = data.clients || [];
+    var ndWC = $("ndWirelessCount");
+    if (ndWC) ndWC.textContent = _wlClients.length;
+    wirelessTabBadge.textContent = _wlClients.length;
+    wirelessTabBadge.className =
+      "card-badge" + (_wlClients.length > 0 ? " active-blue" : "");
+    wirelessNavBadge.textContent = _wlClients.length;
 
     // Band split card
-    var b24=0,b5=0,b6=0;
-    _wlClients.forEach(function(c){ if(c.band==='2.4GHz')b24++; else if(c.band==='5GHz')b5++; else if(c.band==='6GHz')b6++; });
-    var n24=$('wlBandNum24'),n5=$('wlBandNum5'),n6=$('wlBandNum6'),r6=$('wlBandRow6');
-    if(n24) n24.textContent=b24;
-    if(n5)  n5.textContent=b5;
-    if(n6)  n6.textContent=b6;
-    if(r6)  r6.style.display=b6>0?'':'none';
+    var b24 = 0,
+      b5 = 0,
+      b6 = 0;
+    _wlClients.forEach(function (c) {
+      if (c.band === "2.4GHz") b24++;
+      else if (c.band === "5GHz") b5++;
+      else if (c.band === "6GHz") b6++;
+    });
+    var n24 = $("wlBandNum24"),
+      n5 = $("wlBandNum5"),
+      n6 = $("wlBandNum6"),
+      r6 = $("wlBandRow6");
+    if (n24) n24.textContent = b24;
+    if (n5) n5.textContent = b5;
+    if (n6) n6.textContent = b6;
+    if (r6) r6.style.display = b6 > 0 ? "" : "none";
     // Keep legacy header badges updated (used by dashboard card)
-    var el24=$('wlBand24'),el5=$('wlBand5'),el6=$('wlBand6');
-    if(el24) el24.textContent='2.4GHz: '+b24;
-    if(el5)  el5.textContent='5GHz: '+b5;
-    if(el6){ el6.textContent='6GHz: '+b6; el6.style.display=b6>0?'':'none'; }
+    var el24 = $("wlBand24"),
+      el5 = $("wlBand5"),
+      el6 = $("wlBand6");
+    if (el24) el24.textContent = "2.4GHz: " + b24;
+    if (el5) el5.textContent = "5GHz: " + b5;
+    if (el6) {
+      el6.textContent = "6GHz: " + b6;
+      el6.style.display = b6 > 0 ? "" : "none";
+    }
 
     // Signal health card
-    var cntE=0,cntG=0,cntF=0,cntP=0;
-    _wlClients.forEach(function(c){
-      var s=parseInt(c.signal,10)||0;
-      if(s>=-55) cntE++; else if(s>=-65) cntG++; else if(s>=-75) cntF++; else cntP++;
+    var cntE = 0,
+      cntG = 0,
+      cntF = 0,
+      cntP = 0;
+    _wlClients.forEach(function (c) {
+      var s = parseInt(c.signal, 10) || 0;
+      if (s >= -55) cntE++;
+      else if (s >= -65) cntG++;
+      else if (s >= -75) cntF++;
+      else cntP++;
     });
-    var total=_wlClients.length||1;
-    function setSig(barId,cntId,count){
-      var b=$(''+barId),cn=$(''+cntId);
-      if(b)  b.style.width=Math.round((count/total)*100)+'%';
-      if(cn) cn.textContent=count;
+    var total = _wlClients.length || 1;
+    function setSig(barId, cntId, count) {
+      var b = $("" + barId),
+        cn = $("" + cntId);
+      if (b) b.style.width = Math.round((count / total) * 100) + "%";
+      if (cn) cn.textContent = count;
     }
-    setSig('wlSigBarE','wlSigCntE',cntE);
-    setSig('wlSigBarG','wlSigCntG',cntG);
-    setSig('wlSigBarF','wlSigCntF',cntF);
-    setSig('wlSigBarP','wlSigCntP',cntP);
+    setSig("wlSigBarE", "wlSigCntE", cntE);
+    setSig("wlSigBarG", "wlSigCntG", cntG);
+    setSig("wlSigBarF", "wlSigCntF", cntF);
+    setSig("wlSigBarP", "wlSigCntP", cntP);
 
     renderWireless();
   });
 
   // Sort buttons
-  var sortBtns=$('wifiSortBtns');
-  if(sortBtns) sortBtns.addEventListener('click',function(e){
-    var btn=e.target.closest('.wl-sort-btn'); if(!btn) return;
-    _wlSort=btn.dataset.sort;
-    sortBtns.querySelectorAll('.wl-sort-btn').forEach(function(b){b.classList.toggle('active',b===btn);});
-    renderWireless();
-  });
+  var sortBtns = $("wifiSortBtns");
+  if (sortBtns)
+    sortBtns.addEventListener("click", function (e) {
+      var btn = e.target.closest(".wl-sort-btn");
+      if (!btn) return;
+      _wlSort = btn.dataset.sort;
+      sortBtns.querySelectorAll(".wl-sort-btn").forEach(function (b) {
+        b.classList.toggle("active", b === btn);
+      });
+      renderWireless();
+    });
 })();
 
 // ── WireGuard ──────────────────────────────────────────────────────────────
@@ -823,8 +1592,9 @@ function portSvg(sz) {
 // Parse a RouterOS last-handshake duration string ("2m30s", "1h5m20s", etc.)
 // into total seconds. Returns Infinity for "never" / empty, 0 for parse failure.
 function vpnHsToSecs(s) {
-  if (!s || s === 'never') return Infinity;
-  var total = 0, m;
+  if (!s || s === "never") return Infinity;
+  var total = 0,
+    m;
   if ((m = s.match(/(\d+)w/))) total += parseInt(m[1]) * 604800;
   if ((m = s.match(/(\d+)d/))) total += parseInt(m[1]) * 86400;
   if ((m = s.match(/(\d+)h/))) total += parseInt(m[1]) * 3600;
@@ -836,319 +1606,526 @@ function vpnHsToSecs(s) {
 // Build a colour-coded handshake age badge.
 // WireGuard re-keys every ~3 min when active; > 10 min means stalled.
 function vpnHsBadge(uptime, connected) {
-  if (!connected || !uptime || uptime === 'never') {
+  if (!connected || !uptime || uptime === "never") {
     return '<span class="vpn-hs-badge hs-never">Never connected</span>';
   }
   var secs = vpnHsToSecs(uptime);
-  var cls = secs < 180 ? 'hs-ok' : secs < 600 ? 'hs-warn' : 'hs-stale';
+  var cls = secs < 180 ? "hs-ok" : secs < 600 ? "hs-warn" : "hs-stale";
   // Dot indicators: green ● / amber ● / red ●
-  var dot = cls === 'hs-ok' ? '●' : cls === 'hs-warn' ? '●' : '●';
-  return '<span class="vpn-hs-badge ' + cls + '">' + dot + ' ' + esc(uptime) + '</span>';
+  var dot = cls === "hs-ok" ? "●" : cls === "hs-warn" ? "●" : "●";
+  return (
+    '<span class="vpn-hs-badge ' +
+    cls +
+    '">' +
+    dot +
+    " " +
+    esc(uptime) +
+    "</span>"
+  );
 }
 
-socket.on('vpn:update',function(data){
+socket.on("vpn:update", function (data) {
   var allTunnels = data.tunnels || [];
-  var wgPeers   = allTunnels.filter(function(t){ return t.type === 'WireGuard'; });
-  var connected = wgPeers.filter(function(t){ return t.state === 'connected'; });
-  var idle      = wgPeers.filter(function(t){ return t.state !== 'connected'; });
+  var wgPeers = allTunnels.filter(function (t) {
+    return t.type === "WireGuard";
+  });
+  var connected = wgPeers.filter(function (t) {
+    return t.state === "connected";
+  });
+  var idle = wgPeers.filter(function (t) {
+    return t.state !== "connected";
+  });
 
   // ── Dashboard nav badges ──────────────────────────────────────────────────
   vpnCount.textContent = connected.length;
-  vpnCount.className   = 'card-badge' + (connected.length > 0 ? ' active-green' : '');
-  if (vpnPageCount) { vpnPageCount.textContent = wgPeers.length; vpnPageCount.className = 'card-badge' + (wgPeers.length > 0 ? ' active-blue' : ''); }
-  var nb = $('vpnNavBadge'); if (nb) nb.textContent = connected.length;
+  vpnCount.className =
+    "card-badge" + (connected.length > 0 ? " active-green" : "");
+  if (vpnPageCount) {
+    vpnPageCount.textContent = wgPeers.length;
+    vpnPageCount.className =
+      "card-badge" + (wgPeers.length > 0 ? " active-blue" : "");
+  }
+  var nb = $("vpnNavBadge");
+  if (nb) nb.textContent = connected.length;
 
   // ── Dashboard mini card ───────────────────────────────────────────────────
   if (!connected.length) {
-    vpnTable.innerHTML = '<tr><td colspan="3" class="empty-state">No active peers</td></tr>';
+    vpnTable.innerHTML =
+      '<tr><td colspan="3" class="empty-state">No active peers</td></tr>';
   } else {
-    vpnTable.innerHTML = connected.map(function(t) {
-      var endStr = t.endpoint ? '<div style="font-size:.65rem;color:var(--text-muted);margin-top:.1rem">' + esc(t.endpoint) + '</div>' : '';
-      return '<tr>' +
-        '<td><span class="wg-up">Up</span></td>' +
-        '<td><div style="font-size:.78rem;font-weight:600">' + esc(t.name || t.interface || '\u2014') + '</div>' + endStr + '</td>' +
-        '<td style="font-size:.7rem;color:var(--text-muted)">' + esc(t.uptime || '\u2014') + '</td>' +
-        '</tr>';
-    }).join('');
+    vpnTable.innerHTML = connected
+      .map(function (t) {
+        var endStr = t.endpoint
+          ? '<div style="font-size:.65rem;color:var(--text-muted);margin-top:.1rem">' +
+            esc(t.endpoint) +
+            "</div>"
+          : "";
+        return (
+          "<tr>" +
+          '<td><span class="wg-up">Up</span></td>' +
+          '<td><div style="font-size:.78rem;font-weight:600">' +
+          esc(t.name || t.interface || "\u2014") +
+          "</div>" +
+          endStr +
+          "</td>" +
+          '<td style="font-size:.7rem;color:var(--text-muted)">' +
+          esc(t.uptime || "\u2014") +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
   }
 
   // ── VPN page summary stats ────────────────────────────────────────────────
-  var totalThroughputMbps = wgPeers.reduce(function(sum, t) {
-    return sum + ((t.rxRate || 0) + (t.txRate || 0)) / 1e6 * 8;
+  var totalThroughputMbps = wgPeers.reduce(function (sum, t) {
+    return sum + (((t.rxRate || 0) + (t.txRate || 0)) / 1e6) * 8;
   }, 0);
-  var stTotal = $('vpnStatTotal'), stConn = $('vpnStatConn');
-  var stIdle  = $('vpnStatIdle'),  stTput = $('vpnStatThroughput');
+  var stTotal = $("vpnStatTotal"),
+    stConn = $("vpnStatConn");
+  var stIdle = $("vpnStatIdle"),
+    stTput = $("vpnStatThroughput");
   if (stTotal) stTotal.textContent = wgPeers.length;
-  if (stConn)  stConn.textContent  = connected.length;
-  if (stIdle)  stIdle.textContent  = idle.length;
-  if (stTput)  stTput.textContent  = totalThroughputMbps > 0 ? fmtMbps(totalThroughputMbps) : '0';
+  if (stConn) stConn.textContent = connected.length;
+  if (stIdle) stIdle.textContent = idle.length;
+  if (stTput)
+    stTput.textContent =
+      totalThroughputMbps > 0 ? fmtMbps(totalThroughputMbps) : "0";
 
   // ── Tile grid — all peers, connected first ────────────────────────────────
-  wgPeers.sort(function(a, b) { return (b.state === 'connected' ? 1 : 0) - (a.state === 'connected' ? 1 : 0); });
-  var grid = $('vpnPageGrid');
+  wgPeers.sort(function (a, b) {
+    return (
+      (b.state === "connected" ? 1 : 0) - (a.state === "connected" ? 1 : 0)
+    );
+  });
+  var grid = $("vpnPageGrid");
   if (grid) {
     if (!wgPeers.length) {
       grid.innerHTML = '<div class="empty-state">No peers configured</div>';
     } else {
-      grid.innerHTML = wgPeers.map(function(t) {
-        var isConn  = t.state === 'connected';
-        var rxR = t.rxRate || 0, txR = t.txRate || 0;
-        var rxRateStr = rxR > 0 ? '<span style="color:var(--accent-rx)">↓ ' + fmtBytes(Math.round(rxR)) + '/s</span>' : '';
-        var txRateStr = txR > 0 ? '<span style="color:var(--accent-tx)">↑ ' + fmtBytes(Math.round(txR)) + '/s</span>' : '';
-        var totStr = '<span style="color:var(--text-muted)">↓ ' + fmtBytes(parseInt(t.rx, 10) || 0) + ' ↑ ' + fmtBytes(parseInt(t.tx, 10) || 0) + '</span>';
-        var dotCls  = isConn ? 'up' : 'dis';
-        var tileCls = 'vpn-tile ' + (isConn ? 'up' : 'idle');
-        return '<div class="' + tileCls + '">' +
-          '<div class="vpn-tile-name"><span class="iface-dot ' + dotCls + '"></span><span class="vpn-tile-name-text">' + esc(t.name || t.interface || '—') + '</span></div>' +
-          (t.interface ? '<div class="vpn-tile-iface">' + esc(t.interface) + (t.allowedIp ? ' · ' + esc(t.allowedIp) : '') + '</div>' : '') +
-          (t.endpoint ? '<div class="vpn-tile-ip">' + esc(t.endpoint) + '</div>' : '') +
-          '<div class="vpn-tile-hs">' + vpnHsBadge(t.uptime, isConn) + '</div>' +
-          ((rxRateStr || txRateStr) ? '<div class="vpn-tile-traffic">' + rxRateStr + txRateStr + '</div>' : (isConn ? '<div class="vpn-tile-traffic">' + totStr + '</div>' : '')) +
-        '</div>';
-      }).join('');
+      grid.innerHTML = wgPeers
+        .map(function (t) {
+          var isConn = t.state === "connected";
+          var rxR = t.rxRate || 0,
+            txR = t.txRate || 0;
+          var rxRateStr =
+            rxR > 0
+              ? '<span style="color:var(--accent-rx)">↓ ' +
+                fmtBytes(Math.round(rxR)) +
+                "/s</span>"
+              : "";
+          var txRateStr =
+            txR > 0
+              ? '<span style="color:var(--accent-tx)">↑ ' +
+                fmtBytes(Math.round(txR)) +
+                "/s</span>"
+              : "";
+          var totStr =
+            '<span style="color:var(--text-muted)">↓ ' +
+            fmtBytes(parseInt(t.rx, 10) || 0) +
+            " ↑ " +
+            fmtBytes(parseInt(t.tx, 10) || 0) +
+            "</span>";
+          var dotCls = isConn ? "up" : "dis";
+          var tileCls = "vpn-tile " + (isConn ? "up" : "idle");
+          return (
+            '<div class="' +
+            tileCls +
+            '">' +
+            '<div class="vpn-tile-name"><span class="iface-dot ' +
+            dotCls +
+            '"></span><span class="vpn-tile-name-text">' +
+            esc(t.name || t.interface || "—") +
+            "</span></div>" +
+            (t.interface
+              ? '<div class="vpn-tile-iface">' +
+                esc(t.interface) +
+                (t.allowedIp ? " · " + esc(t.allowedIp) : "") +
+                "</div>"
+              : "") +
+            (t.endpoint
+              ? '<div class="vpn-tile-ip">' + esc(t.endpoint) + "</div>"
+              : "") +
+            '<div class="vpn-tile-hs">' +
+            vpnHsBadge(t.uptime, isConn) +
+            "</div>" +
+            (rxRateStr || txRateStr
+              ? '<div class="vpn-tile-traffic">' +
+                rxRateStr +
+                txRateStr +
+                "</div>"
+              : isConn
+                ? '<div class="vpn-tile-traffic">' + totStr + "</div>"
+                : "") +
+            "</div>"
+          );
+        })
+        .join("");
     }
   }
 });
 
 // ── DHCP Leases ────────────────────────────────────────────────────────────
-var _dhcpSortKey = 'ip';
+var _dhcpSortKey = "ip";
 var _dhcpSortDir = 1;
 
 var _dhcpSortCols = [
-  {id:'dhcpThName',   key:'name'},
-  {id:'dhcpThIp',     key:'ip'},
-  {id:'dhcpThMac',    key:'mac'},
-  {id:'dhcpThStatus', key:'status'},
+  { id: "dhcpThName", key: "name" },
+  { id: "dhcpThIp", key: "ip" },
+  { id: "dhcpThMac", key: "mac" },
+  { id: "dhcpThStatus", key: "status" },
 ];
 
 function _refreshDhcpSortHeaders() {
-  _dhcpSortCols.forEach(function(c) {
-    var el = $(c.id); if (!el) return;
-    el.className = c.key === _dhcpSortKey ? (_dhcpSortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+  _dhcpSortCols.forEach(function (c) {
+    var el = $(c.id);
+    if (!el) return;
+    el.className =
+      c.key === _dhcpSortKey
+        ? _dhcpSortDir === 1
+          ? "sort-asc"
+          : "sort-desc"
+        : "";
   });
 }
 
 function _sortLeases(leases) {
-  return leases.slice().sort(function(a, b) {
+  return leases.slice().sort(function (a, b) {
     var av, bv;
-    if      (_dhcpSortKey === 'name')   { av = (a.name||a.hostName||'').toLowerCase(); bv = (b.name||b.hostName||'').toLowerCase(); }
-    else if (_dhcpSortKey === 'ip')     {
+    if (_dhcpSortKey === "name") {
+      av = (a.name || a.hostName || "").toLowerCase();
+      bv = (b.name || b.hostName || "").toLowerCase();
+    } else if (_dhcpSortKey === "ip") {
       // Sort IPs numerically
-      var aOcts = (a.ip||'').split('.').map(Number);
-      var bOcts = (b.ip||'').split('.').map(Number);
-      for (var i = 0; i < 4; i++) { if (aOcts[i] !== bOcts[i]) return _dhcpSortDir * (aOcts[i] - bOcts[i]); }
+      var aOcts = (a.ip || "").split(".").map(Number);
+      var bOcts = (b.ip || "").split(".").map(Number);
+      for (var i = 0; i < 4; i++) {
+        if (aOcts[i] !== bOcts[i]) return _dhcpSortDir * (aOcts[i] - bOcts[i]);
+      }
       return 0;
+    } else if (_dhcpSortKey === "mac") {
+      av = (a.mac || "").toLowerCase();
+      bv = (b.mac || "").toLowerCase();
+    } else if (_dhcpSortKey === "status") {
+      av = (a.status || "").toLowerCase();
+      bv = (b.status || "").toLowerCase();
+    } else {
+      av = "";
+      bv = "";
     }
-    else if (_dhcpSortKey === 'mac')    { av = (a.mac||'').toLowerCase(); bv = (b.mac||'').toLowerCase(); }
-    else if (_dhcpSortKey === 'status') { av = (a.status||'').toLowerCase(); bv = (b.status||'').toLowerCase(); }
-    else { av = ''; bv = ''; }
-    if (typeof av === 'string') return _dhcpSortDir * av.localeCompare(bv);
+    if (typeof av === "string") return _dhcpSortDir * av.localeCompare(bv);
     return _dhcpSortDir * (av - bv);
   });
 }
 
-function renderDhcp(leases){
+function renderDhcp(leases) {
   var filtered = leaseFilter
-    ? leases.filter(function(l){
-        var hay=(l.name+' '+l.ip+' '+l.mac+' '+(l.comment||'')).toLowerCase();
-        return hay.indexOf(leaseFilter)!==-1;
+    ? leases.filter(function (l) {
+        var hay = (
+          l.name +
+          " " +
+          l.ip +
+          " " +
+          l.mac +
+          " " +
+          (l.comment || "")
+        ).toLowerCase();
+        return hay.indexOf(leaseFilter) !== -1;
       })
     : leases;
   var count = leases.length;
-  if(dhcpTotalBadge){
+  if (dhcpTotalBadge) {
     dhcpTotalBadge.textContent = count;
-    dhcpTotalBadge.className = 'card-badge' + (count > 0 ? ' active-blue' : '');
+    dhcpTotalBadge.className = "card-badge" + (count > 0 ? " active-blue" : "");
   }
-  if(dhcpNavBadge) dhcpNavBadge.textContent = count;
-  if(!filtered.length){dhcpTable.innerHTML='<tr><td colspan="4" class="empty-state">No leases'+(leaseFilter?' matching filter':'')+'…</td></tr>';return;}
+  if (dhcpNavBadge) dhcpNavBadge.textContent = count;
+  if (!filtered.length) {
+    dhcpTable.innerHTML =
+      '<tr><td colspan="4" class="empty-state">No leases' +
+      (leaseFilter ? " matching filter" : "") +
+      "…</td></tr>";
+    return;
+  }
   filtered = _sortLeases(filtered);
-  dhcpTable.innerHTML=filtered.map(function(l){
-    var st=(l.status||'').toLowerCase();
-    var pillCls=st==='bound'?'bound':st==='waiting'||st==='offered'?'waiting':'expired';
-    return'<tr>'+
-      '<td style="font-weight:600">'+esc(l.name||l.hostName||'—')+'</td>'+
-      '<td style="color:var(--accent-rx)">'+esc(l.ip)+'</td>'+
-      '<td style="font-size:.7rem;color:var(--text-muted)">'+esc(l.mac||'—')+'</td>'+
-      '<td><span class="lease-pill '+pillCls+'">'+esc(l.status||'?')+'</span></td>'+
-      '</tr>';
-  }).join('');
+  dhcpTable.innerHTML = filtered
+    .map(function (l) {
+      var st = (l.status || "").toLowerCase();
+      var pillCls =
+        st === "bound"
+          ? "bound"
+          : st === "waiting" || st === "offered"
+            ? "waiting"
+            : "expired";
+      return (
+        "<tr>" +
+        '<td style="font-weight:600">' +
+        esc(l.name || l.hostName || "—") +
+        "</td>" +
+        '<td style="color:var(--accent-rx)">' +
+        esc(l.ip) +
+        "</td>" +
+        '<td style="font-size:.7rem;color:var(--text-muted)">' +
+        esc(l.mac || "—") +
+        "</td>" +
+        '<td><span class="lease-pill ' +
+        pillCls +
+        '">' +
+        esc(l.status || "?") +
+        "</span></td>" +
+        "</tr>"
+      );
+    })
+    .join("");
 }
 
 // Wire sort headers
-_dhcpSortCols.forEach(function(col) {
-  var th = $(col.id); if (!th) return;
-  th.addEventListener('click', function() {
+_dhcpSortCols.forEach(function (col) {
+  var th = $(col.id);
+  if (!th) return;
+  th.addEventListener("click", function () {
     if (_dhcpSortKey === col.key) _dhcpSortDir *= -1;
-    else { _dhcpSortKey = col.key; _dhcpSortDir = 1; }
+    else {
+      _dhcpSortKey = col.key;
+      _dhcpSortDir = 1;
+    }
     _refreshDhcpSortHeaders();
     renderDhcp(allLeases);
   });
 });
 _refreshDhcpSortHeaders();
 
-socket.on('leases:list',function(data){
-  allLeases=data.leases||[];
+socket.on("leases:list", function (data) {
+  allLeases = data.leases || [];
   renderDhcp(allLeases);
   renderDhcpGauge(); // update gauge with fresh lease count
 });
-if(dhcpSearch) dhcpSearch.addEventListener('input',function(){
-  leaseFilter=(dhcpSearch.value||'').trim().toLowerCase();
-  renderDhcp(allLeases);
-});
+if (dhcpSearch)
+  dhcpSearch.addEventListener("input", function () {
+    leaseFilter = (dhcpSearch.value || "").trim().toLowerCase();
+    renderDhcp(allLeases);
+  });
 
 // ── Firewall ───────────────────────────────────────────────────────────────
-var _fwSearch = '';
+var _fwSearch = "";
 var _fwDeltaHistory = []; // rolling sparkline of total deltaPackets per update
-var _fwSparkCtx = (function(){ var c=$('fwSparkCanvas'); return c?c.getContext('2d'):null; })();
+var _fwSparkCtx = (function () {
+  var c = $("fwSparkCanvas");
+  return c ? c.getContext("2d") : null;
+})();
 
 // Resize canvas when the firewall page becomes visible (clientWidth is 0 while hidden)
-document.addEventListener('mikrodash:pagechange', function(e) {
-  if (e.detail === 'firewall') {
-    var c = $('fwSparkCanvas'); if (!c) return;
+document.addEventListener("mikrodash:pagechange", function (e) {
+  if (e.detail === "firewall") {
+    var c = $("fwSparkCanvas");
+    if (!c) return;
     var w = c.parentElement ? c.parentElement.clientWidth : 0;
-    if (w > 0) { c.width = w; fwDrawSparkline(); }
+    if (w > 0) {
+      c.width = w;
+      fwDrawSparkline();
+    }
   }
   // When returning to dashboard, redraw chart from the full buffered allPoints history
-  if (e.detail === 'dashboard' && allPoints.length) {
+  if (e.detail === "dashboard" && allPoints.length) {
     requestAnimationFrame(redrawChart);
   }
 });
 
 // ── Page Visibility: pause SVG animations and skip rAF flushes when hidden ─
-document.addEventListener('visibilitychange', function() {
-  var svg = $('netDiagram');
+document.addEventListener("visibilitychange", function () {
+  var svg = $("netDiagram");
   if (svg) {
     if (document.hidden) svg.pauseAnimations();
     else {
       svg.unpauseAnimations();
       // Flush any pending data that accumulated while hidden
-      if (_pendingSysData && !_sysRafId) _sysRafId = requestAnimationFrame(_flushSysUpdate);
-      if (_pendingConnData && !_connRafId) _connRafId = requestAnimationFrame(_flushConnUpdate);
+      if (_pendingSysData && !_sysRafId)
+        _sysRafId = requestAnimationFrame(_flushSysUpdate);
+      if (_pendingConnData && !_connRafId)
+        _connRafId = requestAnimationFrame(_flushConnUpdate);
       // Redraw traffic chart from buffered allPoints so the gap while hidden is filled
       if (allPoints.length) requestAnimationFrame(redrawChart);
     }
   }
 });
 
-function fwDrawSparkline(){
-  var c=$('fwSparkCanvas'); if(!c||!_fwSparkCtx) return;
-  var w=c.width, h=c.height, data=_fwDeltaHistory;
-  _fwSparkCtx.clearRect(0,0,w,h);
-  if(data.length<2) return;
-  var max=Math.max.apply(null,data)||1;
+function fwDrawSparkline() {
+  var c = $("fwSparkCanvas");
+  if (!c || !_fwSparkCtx) return;
+  var w = c.width,
+    h = c.height,
+    data = _fwDeltaHistory;
+  _fwSparkCtx.clearRect(0, 0, w, h);
+  if (data.length < 2) return;
+  var max = Math.max.apply(null, data) || 1;
   _fwSparkCtx.beginPath();
-  _fwSparkCtx.strokeStyle='rgba(56,189,248,.7)';
-  _fwSparkCtx.lineWidth=1.5;
-  _fwSparkCtx.lineJoin='round';
-  for(var i=0;i<data.length;i++){
-    var x=(i/(data.length-1))*w;
-    var y=h-(data[i]/max)*(h-3)-1;
-    i===0?_fwSparkCtx.moveTo(x,y):_fwSparkCtx.lineTo(x,y);
+  _fwSparkCtx.strokeStyle = "rgba(56,189,248,.7)";
+  _fwSparkCtx.lineWidth = 1.5;
+  _fwSparkCtx.lineJoin = "round";
+  for (var i = 0; i < data.length; i++) {
+    var x = (i / (data.length - 1)) * w;
+    var y = h - (data[i] / max) * (h - 3) - 1;
+    i === 0 ? _fwSparkCtx.moveTo(x, y) : _fwSparkCtx.lineTo(x, y);
   }
   _fwSparkCtx.stroke();
 }
 
-function fwUpdateSummary(data){
-  var filter=data.filter||[], nat=data.nat||[], mangle=data.mangle||[], raw=data.raw||[];
-  var all=[...filter,...nat,...mangle,...raw];
+function fwUpdateSummary(data) {
+  var filter = data.filter || [],
+    nat = data.nat || [],
+    mangle = data.mangle || [],
+    raw = data.raw || [];
+  var all = [...filter, ...nat, ...mangle, ...raw];
 
   // Rule counts
-  function setCount(totalId,disId,rules){
-    var tot=$(totalId), dis=$(disId);
-    if(tot) tot.textContent=rules.length;
-    var nDis=rules.filter(function(r){return r.disabled;}).length;
-    if(dis) dis.textContent=nDis>0?(nDis+' off'):'';
+  function setCount(totalId, disId, rules) {
+    var tot = $(totalId),
+      dis = $(disId);
+    if (tot) tot.textContent = rules.length;
+    var nDis = rules.filter(function (r) {
+      return r.disabled;
+    }).length;
+    if (dis) dis.textContent = nDis > 0 ? nDis + " off" : "";
   }
-  setCount('fwCntFilter','fwCntFilterDis',filter);
-  setCount('fwCntNat','fwCntNatDis',nat);
-  setCount('fwCntMangle','fwCntMangleDis',mangle);
-  setCount('fwCntRaw','fwCntRawDis',raw);
+  setCount("fwCntFilter", "fwCntFilterDis", filter);
+  setCount("fwCntNat", "fwCntNatDis", nat);
+  setCount("fwCntMangle", "fwCntMangleDis", mangle);
+  setCount("fwCntRaw", "fwCntRawDis", raw);
 
   // Action breakdown
-  var actionCounts={};
-  all.forEach(function(r){
-    var a=r.action||'?';
-    actionCounts[a]=(actionCounts[a]||0)+1;
+  var actionCounts = {};
+  all.forEach(function (r) {
+    var a = r.action || "?";
+    actionCounts[a] = (actionCounts[a] || 0) + 1;
   });
-  var actionEntries=Object.entries(actionCounts).sort(function(a,b){return b[1]-a[1];}).slice(0,7);
-  var maxA=actionEntries.length?actionEntries[0][1]:1;
-  var ACTION_COLOUR={
-    accept:'rgba(52,211,153,.8)', drop:'rgba(248,113,113,.8)',
-    reject:'rgba(251,113,133,.8)', masquerade:'rgba(56,189,248,.8)',
-    'dst-nat':'rgba(251,191,36,.8)', 'src-nat':'rgba(251,191,36,.8)',
-    log:'rgba(167,139,250,.8)', passthrough:'rgba(52,211,153,.6)',
+  var actionEntries = Object.entries(actionCounts)
+    .sort(function (a, b) {
+      return b[1] - a[1];
+    })
+    .slice(0, 7);
+  var maxA = actionEntries.length ? actionEntries[0][1] : 1;
+  var ACTION_COLOUR = {
+    accept: "rgba(52,211,153,.8)",
+    drop: "rgba(248,113,113,.8)",
+    reject: "rgba(251,113,133,.8)",
+    masquerade: "rgba(56,189,248,.8)",
+    "dst-nat": "rgba(251,191,36,.8)",
+    "src-nat": "rgba(251,191,36,.8)",
+    log: "rgba(167,139,250,.8)",
+    passthrough: "rgba(52,211,153,.6)",
   };
-  var listEl=$('fwActionList');
-  if(listEl){
-    listEl.innerHTML=actionEntries.map(function(e){
-      var col=ACTION_COLOUR[e[0]]||'rgba(99,130,190,.7)';
-      return'<div class="fw-action-row">'+
-        '<span class="fw-action-name" style="color:'+col+'">'+esc(e[0])+'</span>'+
-        '<div class="fw-action-bar-wrap"><div class="fw-action-bar" style="width:'+Math.round((e[1]/maxA)*100)+'%;background:'+col+'"></div></div>'+
-        '<span class="fw-action-count">'+e[1]+'</span>'+
-      '</div>';
-    }).join('') || '<div class="fw-action-row"><span class="fw-action-name" style="color:var(--text-muted)">No rules</span></div>';
+  var listEl = $("fwActionList");
+  if (listEl) {
+    listEl.innerHTML =
+      actionEntries
+        .map(function (e) {
+          var col = ACTION_COLOUR[e[0]] || "rgba(99,130,190,.7)";
+          return (
+            '<div class="fw-action-row">' +
+            '<span class="fw-action-name" style="color:' +
+            col +
+            '">' +
+            esc(e[0]) +
+            "</span>" +
+            '<div class="fw-action-bar-wrap"><div class="fw-action-bar" style="width:' +
+            Math.round((e[1] / maxA) * 100) +
+            "%;background:" +
+            col +
+            '"></div></div>' +
+            '<span class="fw-action-count">' +
+            e[1] +
+            "</span>" +
+            "</div>"
+          );
+        })
+        .join("") ||
+      '<div class="fw-action-row"><span class="fw-action-name" style="color:var(--text-muted)">No rules</span></div>';
   }
 
   // Activity / sparkline
-  var totalPkts=all.reduce(function(a,r){return a+r.packets;},0);
-  var totalBytes=all.reduce(function(a,r){return a+(r.bytes||0);},0);
-  var deltaPkts=all.reduce(function(a,r){return a+(r.deltaPackets||0);},0);
-  var tp=$('fwTotalPackets'), tb=$('fwTotalBytes');
-  if(tp) tp.textContent=totalPkts.toLocaleString();
-  if(tb) tb.textContent=totalBytes>0?('/ '+fmtBytes(totalBytes)+' total'):'';
+  var totalPkts = all.reduce(function (a, r) {
+    return a + r.packets;
+  }, 0);
+  var totalBytes = all.reduce(function (a, r) {
+    return a + (r.bytes || 0);
+  }, 0);
+  var deltaPkts = all.reduce(function (a, r) {
+    return a + (r.deltaPackets || 0);
+  }, 0);
+  var tp = $("fwTotalPackets"),
+    tb = $("fwTotalBytes");
+  if (tp) tp.textContent = totalPkts.toLocaleString();
+  if (tb)
+    tb.textContent =
+      totalBytes > 0 ? "/ " + fmtBytes(totalBytes) + " total" : "";
   _fwDeltaHistory.push(deltaPkts);
-  if(_fwDeltaHistory.length>40) _fwDeltaHistory.shift();
+  if (_fwDeltaHistory.length > 40) _fwDeltaHistory.shift();
   fwDrawSparkline();
 }
 
-var _fwRafId=null;
-socket.on('firewall:update',function(data){
+var _fwRafId = null;
+socket.on("firewall:update", function (data) {
   var wasEmpty = !fwData.filter;
-  fwData=data;
+  fwData = data;
   fwUpdateSummary(data);
   // If the table is already rendered with the same tab's rules, update counters
   // in-place rather than re-rendering the entire table — this lets the flash
   // animation be clearly visible and avoids scroll position resets.
-  if(!wasEmpty && fwUpdateCountersInPlace(data)){
+  if (!wasEmpty && fwUpdateCountersInPlace(data)) {
     return; // in-place update succeeded
   }
   // Structural change — defer full re-render to next animation frame
-  if(!_fwRafId) _fwRafId=requestAnimationFrame(function(){ _fwRafId=null; renderFirewallTab(); });
+  if (!_fwRafId)
+    _fwRafId = requestAnimationFrame(function () {
+      _fwRafId = null;
+      renderFirewallTab();
+    });
 });
 
-function fwUpdateCountersInPlace(data){
-  if(!firewallTable) return false;
-  var rules=fwTab==='top'?(data.topByHits||[]):fwTab==='filter'?(data.filter||[]):fwTab==='nat'?(data.nat||[]):fwTab==='raw'?(data.raw||[]):(data.mangle||[]);
+function fwUpdateCountersInPlace(data) {
+  if (!firewallTable) return false;
+  var rules =
+    fwTab === "top"
+      ? data.topByHits || []
+      : fwTab === "filter"
+        ? data.filter || []
+        : fwTab === "nat"
+          ? data.nat || []
+          : fwTab === "raw"
+            ? data.raw || []
+            : data.mangle || [];
   // Check all rows are already present with matching IDs
-  var rows=firewallTable.querySelectorAll('tr[data-rule-id]');
-  if(!rows.length) return false;
-  if(rows.length !== rules.length) return false; // rule count changed — full re-render
-  var idMatch=true;
-  rows.forEach(function(row,i){ if(row.dataset.ruleId !== (rules[i]&&rules[i].id)) idMatch=false; });
-  if(!idMatch) return false;
+  var rows = firewallTable.querySelectorAll("tr[data-rule-id]");
+  if (!rows.length) return false;
+  if (rows.length !== rules.length) return false; // rule count changed — full re-render
+  var idMatch = true;
+  rows.forEach(function (row, i) {
+    if (row.dataset.ruleId !== (rules[i] && rules[i].id)) idMatch = false;
+  });
+  if (!idMatch) return false;
   // Update only the packet/byte cells in-place
-  rows.forEach(function(row,i){
-    var r=rules[i];
-    var pktCell=row.querySelector('.fw-pkt');
-    var byteCell=row.querySelector('.fw-byte');
-    if(pktCell){
-      var newPkt=(r.deltaPackets>0?'<span class="fw-delta-dot"></span>':'')+r.packets.toLocaleString();
-      if(pktCell.innerHTML!==newPkt){
-        pktCell.innerHTML=newPkt;
-        pktCell.classList.remove('fw-cell-flash');
+  rows.forEach(function (row, i) {
+    var r = rules[i];
+    var pktCell = row.querySelector(".fw-pkt");
+    var byteCell = row.querySelector(".fw-byte");
+    if (pktCell) {
+      var newPkt =
+        (r.deltaPackets > 0 ? '<span class="fw-delta-dot"></span>' : "") +
+        r.packets.toLocaleString();
+      if (pktCell.innerHTML !== newPkt) {
+        pktCell.innerHTML = newPkt;
+        pktCell.classList.remove("fw-cell-flash");
         // Force reflow to restart animation
         void pktCell.offsetWidth;
-        pktCell.classList.add('fw-cell-flash');
+        pktCell.classList.add("fw-cell-flash");
       }
     }
-    if(byteCell){
-      var newByte=r.bytes>0?fmtBytes(r.bytes):'\u2014';
-      if(byteCell.textContent!==newByte){
-        byteCell.textContent=newByte;
-        byteCell.classList.remove('fw-cell-flash');
+    if (byteCell) {
+      var newByte = r.bytes > 0 ? fmtBytes(r.bytes) : "\u2014";
+      if (byteCell.textContent !== newByte) {
+        byteCell.textContent = newByte;
+        byteCell.classList.remove("fw-cell-flash");
         void byteCell.offsetWidth;
-        byteCell.classList.add('fw-cell-flash');
+        byteCell.classList.add("fw-cell-flash");
       }
     }
   });
@@ -1156,234 +2133,425 @@ function fwUpdateCountersInPlace(data){
 }
 
 // Search
-var fwSearchEl=$('fwSearch');
-if(fwSearchEl) fwSearchEl.addEventListener('input',function(){
-  _fwSearch=(fwSearchEl.value||'').trim().toLowerCase();
-  renderFirewallTab();
-});
+var fwSearchEl = $("fwSearch");
+if (fwSearchEl)
+  fwSearchEl.addEventListener("input", function () {
+    _fwSearch = (fwSearchEl.value || "").trim().toLowerCase();
+    renderFirewallTab();
+  });
 
-function renderFirewallTab(){
-  var rules=fwTab==='top'?(fwData.topByHits||[]):fwTab==='filter'?(fwData.filter||[]):fwTab==='nat'?(fwData.nat||[]):fwTab==='raw'?(fwData.raw||[]):(fwData.mangle||[]);
+function renderFirewallTab() {
+  var rules =
+    fwTab === "top"
+      ? fwData.topByHits || []
+      : fwTab === "filter"
+        ? fwData.filter || []
+        : fwTab === "nat"
+          ? fwData.nat || []
+          : fwTab === "raw"
+            ? fwData.raw || []
+            : fwData.mangle || [];
   // Apply search filter
-  if(_fwSearch){
-    var q=_fwSearch;
-    rules=rules.filter(function(r){
-      return(r.chain&&r.chain.toLowerCase().includes(q))||
-             (r.action&&r.action.toLowerCase().includes(q))||
-             (r.srcAddress&&r.srcAddress.toLowerCase().includes(q))||
-             (r.dstAddress&&r.dstAddress.toLowerCase().includes(q))||
-             (r.comment&&r.comment.toLowerCase().includes(q))||
-             (r.protocol&&r.protocol.toLowerCase().includes(q))||
-             (r.dstPort&&r.dstPort.includes(q));
+  if (_fwSearch) {
+    var q = _fwSearch;
+    rules = rules.filter(function (r) {
+      return (
+        (r.chain && r.chain.toLowerCase().includes(q)) ||
+        (r.action && r.action.toLowerCase().includes(q)) ||
+        (r.srcAddress && r.srcAddress.toLowerCase().includes(q)) ||
+        (r.dstAddress && r.dstAddress.toLowerCase().includes(q)) ||
+        (r.comment && r.comment.toLowerCase().includes(q)) ||
+        (r.protocol && r.protocol.toLowerCase().includes(q)) ||
+        (r.dstPort && r.dstPort.includes(q))
+      );
     });
   }
-  if(!rules.length){
-    firewallTable.innerHTML='<tr><td colspan="6" class="empty-state">'+(
-      _fwSearch?'No rules match search':(fwTab==='top'?'No rules with hits':'No rules'))+'</td></tr>';
+  if (!rules.length) {
+    firewallTable.innerHTML =
+      '<tr><td colspan="6" class="empty-state">' +
+      (_fwSearch
+        ? "No rules match search"
+        : fwTab === "top"
+          ? "No rules with hits"
+          : "No rules") +
+      "</td></tr>";
     return;
   }
-  firewallTable.innerHTML=rules.map(function(r){
-    var sd=[r.srcAddress,r.dstAddress].filter(Boolean).join(' \u2192 ')||(r.inInterface||'');
-    if(!sd&&r.dstPort)sd=':'+r.dstPort;
-    if(r.protocol)sd+=(sd?' ':'')+'/ '+r.protocol;
-    var deltaIndicator=r.deltaPackets>0?'<span class="fw-delta-dot"></span>':'';
-    return'<tr data-rule-id="'+esc(r.id)+'"'+(r.disabled?' style="opacity:.4"':'')+'>'+
-      '<td style="font-size:.7rem;color:var(--text-muted)">'+esc(r.chain)+'</td>'+
-      '<td>'+actionBadge(r.action)+'</td>'+
-      '<td style="font-size:.7rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(sd||'\u2014')+'</td>'+
-      '<td style="font-size:.7rem;color:var(--text-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.comment||'\u2014')+'</td>'+
-      '<td class="fw-pkt text-end" style="font-family:var(--font-mono);white-space:nowrap">'+deltaIndicator+r.packets.toLocaleString()+'</td>'+
-      '<td class="fw-byte text-end" style="font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted);white-space:nowrap">'+(r.bytes>0?fmtBytes(r.bytes):'\u2014')+'</td>'+
-    '</tr>';
-  }).join('');
+  firewallTable.innerHTML = rules
+    .map(function (r) {
+      var sd =
+        [r.srcAddress, r.dstAddress].filter(Boolean).join(" \u2192 ") ||
+        r.inInterface ||
+        "";
+      if (!sd && r.dstPort) sd = ":" + r.dstPort;
+      if (r.protocol) sd += (sd ? " " : "") + "/ " + r.protocol;
+      var deltaIndicator =
+        r.deltaPackets > 0 ? '<span class="fw-delta-dot"></span>' : "";
+      return (
+        '<tr data-rule-id="' +
+        esc(r.id) +
+        '"' +
+        (r.disabled ? ' style="opacity:.4"' : "") +
+        ">" +
+        '<td style="font-size:.7rem;color:var(--text-muted)">' +
+        esc(r.chain) +
+        "</td>" +
+        "<td>" +
+        actionBadge(r.action) +
+        "</td>" +
+        '<td style="font-size:.7rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+        esc(sd || "\u2014") +
+        "</td>" +
+        '<td style="font-size:.7rem;color:var(--text-muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+        esc(r.comment || "\u2014") +
+        "</td>" +
+        '<td class="fw-pkt text-end" style="font-family:var(--font-mono);white-space:nowrap">' +
+        deltaIndicator +
+        r.packets.toLocaleString() +
+        "</td>" +
+        '<td class="fw-byte text-end" style="font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted);white-space:nowrap">' +
+        (r.bytes > 0 ? fmtBytes(r.bytes) : "\u2014") +
+        "</td>" +
+        "</tr>"
+      );
+    })
+    .join("");
 }
 
 // ── Logs ───────────────────────────────────────────────────────────────────
-var logBuffer=[],MAX_LOG_LINES=2000;
-var logCountEls={
-  error:$('logCountError'), warning:$('logCountWarning'),
-  info:$('logCountInfo'),   debug:$('logCountDebug')
+var logBuffer = [],
+  MAX_LOG_LINES = 2000;
+var logCountEls = {
+  error: $("logCountError"),
+  warning: $("logCountWarning"),
+  info: $("logCountInfo"),
+  debug: $("logCountDebug"),
 };
-function updateLogCounts(){
-  var counts={error:0,warning:0,info:0,debug:0};
-  logBuffer.forEach(function(e){if(counts[e.severity]!==undefined)counts[e.severity]++;});
-  Object.keys(counts).forEach(function(sev){
-    var el=logCountEls[sev];
-    if(!el) return;
-    var n=counts[sev];
-    el.textContent=n+' '+(sev==='error'&&n!==1?'errors':sev==='warning'&&n!==1?'warnings':sev);
+function updateLogCounts() {
+  var counts = { error: 0, warning: 0, info: 0, debug: 0 };
+  logBuffer.forEach(function (e) {
+    if (counts[e.severity] !== undefined) counts[e.severity]++;
+  });
+  Object.keys(counts).forEach(function (sev) {
+    var el = logCountEls[sev];
+    if (!el) return;
+    var n = counts[sev];
+    el.textContent =
+      n +
+      " " +
+      (sev === "error" && n !== 1
+        ? "errors"
+        : sev === "warning" && n !== 1
+          ? "warnings"
+          : sev);
   });
 }
-function topicClass(t){t=String(t).toLowerCase();if(t.includes('firewall')||t.includes('forward'))return'log-firewall';if(t.includes('dhcp'))return'log-dhcp';if(t.includes('wireless')||t.includes('wifi')||t.includes('wlan'))return'log-wireless';if(t.includes('system'))return'log-system';return'log-topic';}
+function topicClass(t) {
+  t = String(t).toLowerCase();
+  if (t.includes("firewall") || t.includes("forward")) return "log-firewall";
+  if (t.includes("dhcp")) return "log-dhcp";
+  if (t.includes("wireless") || t.includes("wifi") || t.includes("wlan"))
+    return "log-wireless";
+  if (t.includes("system")) return "log-system";
+  return "log-topic";
+}
 updateLogCounts(); // initialise badge labels to "0 …" immediately
-function sevClass(s){return s==='error'?'log-error':s==='warning'?'log-warning':s==='debug'?'log-debug':'log-info';}
-function buildLogHtml(l){return'<div class="log-line"><span class="log-time">'+esc(l.time)+'</span> <span class="'+topicClass(l.topics)+'">['+esc(l.topics)+']</span> <span class="'+sevClass(l.severity)+'">'+esc(l.message)+'</span></div>';}
-function flushLogs(){
-  var f=logBuffer.filter(function(e){if(logLevel&&e.severity!==logLevel)return false;if(logFilter&&e.text.indexOf(logFilter)===-1)return false;return true;});
-  logsEl.innerHTML=f.map(function(e){return e.html;}).join('');
-  if(autoScroll)logsEl.scrollTop=logsEl.scrollHeight;
+function sevClass(s) {
+  return s === "error"
+    ? "log-error"
+    : s === "warning"
+      ? "log-warning"
+      : s === "debug"
+        ? "log-debug"
+        : "log-info";
+}
+function buildLogHtml(l) {
+  return (
+    '<div class="log-line"><span class="log-time">' +
+    esc(l.time) +
+    '</span> <span class="' +
+    topicClass(l.topics) +
+    '">[' +
+    esc(l.topics) +
+    ']</span> <span class="' +
+    sevClass(l.severity) +
+    '">' +
+    esc(l.message) +
+    "</span></div>"
+  );
+}
+function flushLogs() {
+  var f = logBuffer.filter(function (e) {
+    if (logLevel && e.severity !== logLevel) return false;
+    if (logFilter && e.text.indexOf(logFilter) === -1) return false;
+    return true;
+  });
+  logsEl.innerHTML = f
+    .map(function (e) {
+      return e.html;
+    })
+    .join("");
+  if (autoScroll) logsEl.scrollTop = logsEl.scrollHeight;
   updateLogCounts();
 }
 // Batch replay of buffered log history on connect/reconnect (survives page refresh)
-socket.on('logs:history',function(lines){
-  lines.forEach(function(line){
-    var html=buildLogHtml(line);
-    var text=(line.time+' ['+line.topics+'] '+line.message).toLowerCase();
-    logBuffer.push({html:html,severity:line.severity,text:text});
+socket.on("logs:history", function (lines) {
+  lines.forEach(function (line) {
+    var html = buildLogHtml(line);
+    var text = (
+      line.time +
+      " [" +
+      line.topics +
+      "] " +
+      line.message
+    ).toLowerCase();
+    logBuffer.push({ html: html, severity: line.severity, text: text });
   });
-  if(logBuffer.length>MAX_LOG_LINES)logBuffer.splice(0,logBuffer.length-MAX_LOG_LINES);
+  if (logBuffer.length > MAX_LOG_LINES)
+    logBuffer.splice(0, logBuffer.length - MAX_LOG_LINES);
   flushLogs();
 });
-socket.on('logs:new',function(line){
-  var html=buildLogHtml(line);
-  var text=(line.time+' ['+line.topics+'] '+line.message).toLowerCase();
-  var entry={html:html,severity:line.severity,text:text};
+socket.on("logs:new", function (line) {
+  var html = buildLogHtml(line);
+  var text = (
+    line.time +
+    " [" +
+    line.topics +
+    "] " +
+    line.message
+  ).toLowerCase();
+  var entry = { html: html, severity: line.severity, text: text };
   logBuffer.push(entry);
-  if(logBuffer.length>MAX_LOG_LINES)logBuffer.shift();
+  if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift();
   updateLogCounts();
-  if(logLevel&&entry.severity!==logLevel)return;
-  if(logFilter&&text.indexOf(logFilter)===-1)return;
-  logsEl.insertAdjacentHTML('beforeend',html);
-  while(logsEl.children.length>MAX_LOG_LINES)logsEl.removeChild(logsEl.firstElementChild);
-  if(autoScroll)logsEl.scrollTop=logsEl.scrollHeight;
+  if (logLevel && entry.severity !== logLevel) return;
+  if (logFilter && text.indexOf(logFilter) === -1) return;
+  logsEl.insertAdjacentHTML("beforeend", html);
+  while (logsEl.children.length > MAX_LOG_LINES)
+    logsEl.removeChild(logsEl.firstElementChild);
+  if (autoScroll) logsEl.scrollTop = logsEl.scrollHeight;
 });
-logSearch.addEventListener('input',function(){logFilter=(logSearch.value||'').trim().toLowerCase();flushLogs();});
-logSeverity.addEventListener('change',function(){logLevel=logSeverity.value;Object.keys(logCountEls).forEach(function(s){if(logCountEls[s])logCountEls[s].classList.toggle('active',s===logLevel);});flushLogs();});
-toggleScroll.addEventListener('click',function(){autoScroll=!autoScroll;toggleScroll.textContent=autoScroll?'Pause':'Resume';});
-clearLogs.addEventListener('click',function(){logBuffer=[];logsEl.innerHTML='';updateLogCounts();});
+logSearch.addEventListener("input", function () {
+  logFilter = (logSearch.value || "").trim().toLowerCase();
+  flushLogs();
+});
+logSeverity.addEventListener("change", function () {
+  logLevel = logSeverity.value;
+  Object.keys(logCountEls).forEach(function (s) {
+    if (logCountEls[s])
+      logCountEls[s].classList.toggle("active", s === logLevel);
+  });
+  flushLogs();
+});
+toggleScroll.addEventListener("click", function () {
+  autoScroll = !autoScroll;
+  toggleScroll.textContent = autoScroll ? "Pause" : "Resume";
+});
+clearLogs.addEventListener("click", function () {
+  logBuffer = [];
+  logsEl.innerHTML = "";
+  updateLogCounts();
+});
 // Badge click → toggle severity filter
-Object.keys(logCountEls).forEach(function(sev){
-  var el=logCountEls[sev]; if(!el) return;
-  el.addEventListener('click',function(){
-    if(logLevel===sev){ logLevel=''; logSeverity.value=''; }
-    else { logLevel=sev; logSeverity.value=sev; }
-    Object.keys(logCountEls).forEach(function(s){ if(logCountEls[s]) logCountEls[s].classList.toggle('active',s===logLevel); });
+Object.keys(logCountEls).forEach(function (sev) {
+  var el = logCountEls[sev];
+  if (!el) return;
+  el.addEventListener("click", function () {
+    if (logLevel === sev) {
+      logLevel = "";
+      logSeverity.value = "";
+    } else {
+      logLevel = sev;
+      logSeverity.value = sev;
+    }
+    Object.keys(logCountEls).forEach(function (s) {
+      if (logCountEls[s])
+        logCountEls[s].classList.toggle("active", s === logLevel);
+    });
     flushLogs();
   });
-});;
+});
 
 // ── Interface + window selectors ───────────────────────────────────────────
-socket.on('interfaces:list',function(data){
-  if(data.interfaces&&data.interfaces.length){
-    ifaceSelect.innerHTML='';
-    data.interfaces.forEach(function(i){
-      var opt=document.createElement('option');
-      opt.value=i.name;
-      var suf=(i.disabled==='true'||i.disabled===true)?' [disabled]':(!i.running||i.running==='false')?' [down]':'';
-      opt.textContent=i.name+suf;
+socket.on("interfaces:list", function (data) {
+  if (data.interfaces && data.interfaces.length) {
+    ifaceSelect.innerHTML = "";
+    data.interfaces.forEach(function (i) {
+      var opt = document.createElement("option");
+      opt.value = i.name;
+      var suf =
+        i.disabled === "true" || i.disabled === true
+          ? " [disabled]"
+          : !i.running || i.running === "false"
+            ? " [down]"
+            : "";
+      opt.textContent = i.name + suf;
       ifaceSelect.appendChild(opt);
     });
   }
-  if(data.defaultIf)ifaceSelect.value=data.defaultIf;
+  if (data.defaultIf) ifaceSelect.value = data.defaultIf;
 });
 // If the server failed to fetch the interface list, show a visible placeholder
 // in the dropdown rather than leaving it silently empty.
-socket.on('interfaces:error',function(data){
-  ifaceSelect.innerHTML='';
-  var opt=document.createElement('option');
-  opt.value='';
-  opt.textContent='Interface list unavailable';
-  opt.disabled=true;
-  opt.selected=true;
+socket.on("interfaces:error", function (data) {
+  ifaceSelect.innerHTML = "";
+  var opt = document.createElement("option");
+  opt.value = "";
+  opt.textContent = "Interface list unavailable";
+  opt.disabled = true;
+  opt.selected = true;
   ifaceSelect.appendChild(opt);
-  console.warn('[MikroDash] interfaces:error —',data&&data.reason?data.reason:'unknown error');
+  console.warn(
+    "[MikroDash] interfaces:error —",
+    data && data.reason ? data.reason : "unknown error",
+  );
 });
-ifaceSelect.addEventListener('change',function(){socket.emit('traffic:select',{ifName:ifaceSelect.value});});
-var windowSelect=$('windowSelect');
-var WINDOW_OPTIONS={'1m':60,'5m':300,'15m':900,'30m':1800};
-if(windowSelect){windowSelect.addEventListener('change',function(){applyWindow(WINDOW_OPTIONS[windowSelect.value]||60);});}
+ifaceSelect.addEventListener("change", function () {
+  socket.emit("traffic:select", { ifName: ifaceSelect.value });
+});
+var windowSelect = $("windowSelect");
+var WINDOW_OPTIONS = { "1m": 60, "5m": 300, "15m": 900, "30m": 1800 };
+if (windowSelect) {
+  windowSelect.addEventListener("change", function () {
+    applyWindow(WINDOW_OPTIONS[windowSelect.value] || 60);
+  });
+}
 
 // ── Traffic events ─────────────────────────────────────────────────────────
-socket.on('traffic:history',function(data){
-  currentIf=data.ifName; ifaceSelect.value=data.ifName;
-  var pts=data.points||[]; initChart(pts);
-  if(pts.length){var last=pts[pts.length-1];liveRx.textContent=fmtMbps(last.rx_mbps);liveTx.textContent=fmtMbps(last.tx_mbps);}
+socket.on("traffic:history", function (data) {
+  currentIf = data.ifName;
+  ifaceSelect.value = data.ifName;
+  var pts = data.points || [];
+  initChart(pts);
+  if (pts.length) {
+    var last = pts[pts.length - 1];
+    liveRx.textContent = fmtMbps(last.rx_mbps);
+    liveTx.textContent = fmtMbps(last.tx_mbps);
+  }
   // Reset stale timer when new router history arrives — prevents the 10s stale
   // threshold from firing if the new router takes a few seconds to connect.
-  staleTimers['trafficCard']=Date.now();
-  var tc=$('trafficCard');if(tc)tc.classList.remove('is-stale');
+  staleTimers["trafficCard"] = Date.now();
+  var tc = $("trafficCard");
+  if (tc) tc.classList.remove("is-stale");
 });
-var _pendingTraffic = null, _trafficRafId = null;
-socket.on('traffic:update',function(sample){
-  if(!currentIf||sample.ifName!==currentIf)return;
+var _pendingTraffic = null,
+  _trafficRafId = null;
+socket.on("traffic:update", function (sample) {
+  if (!currentIf || sample.ifName !== currentIf) return;
   // Always buffer into allPoints so history is preserved while the tab is hidden
   // or the user is on another page. Only the chart DOM update is deferred/skipped.
-  allPoints.push({ts:sample.ts,rx_mbps:sample.rx_mbps,tx_mbps:sample.tx_mbps});
-  if(allPoints.length>MAX_CLIENT_POINTS)allPoints.shift();
-  _pendingTraffic = sample;
-  if(!_trafficRafId) _trafficRafId = requestAnimationFrame(function(){
-    _trafficRafId = null;
-    if(document.hidden || !_pendingTraffic) return;
-    var p = _pendingTraffic; _pendingTraffic = null;
-    liveRx.textContent=fmtMbps(p.rx_mbps); liveTx.textContent=fmtMbps(p.tx_mbps);
-    var cutoff=Date.now()-(windowSecs*1000); if(p.ts<cutoff)return;
-    if(!chart)makeChartObj();
-    var lbl=chart.data.labels,rx=chart.data.datasets[0].data,tx=chart.data.datasets[1].data;
-    while(lbl.length>0&&allPoints[allPoints.length-lbl.length].ts<cutoff){lbl.shift();rx.shift();tx.shift();}
-    lbl.push(new Date(p.ts).toLocaleTimeString()); rx.push(p.rx_mbps); tx.push(p.tx_mbps);
-    chart.update('none');
+  allPoints.push({
+    ts: sample.ts,
+    rx_mbps: sample.rx_mbps,
+    tx_mbps: sample.tx_mbps,
   });
+  if (allPoints.length > MAX_CLIENT_POINTS) allPoints.shift();
+  _pendingTraffic = sample;
+  if (!_trafficRafId)
+    _trafficRafId = requestAnimationFrame(function () {
+      _trafficRafId = null;
+      if (document.hidden || !_pendingTraffic) return;
+      var p = _pendingTraffic;
+      _pendingTraffic = null;
+      liveRx.textContent = fmtMbps(p.rx_mbps);
+      liveTx.textContent = fmtMbps(p.tx_mbps);
+      var cutoff = Date.now() - windowSecs * 1000;
+      if (p.ts < cutoff) return;
+      if (!chart) makeChartObj();
+      var lbl = chart.data.labels,
+        rx = chart.data.datasets[0].data,
+        tx = chart.data.datasets[1].data;
+      while (
+        lbl.length > 0 &&
+        allPoints[allPoints.length - lbl.length].ts < cutoff
+      ) {
+        lbl.shift();
+        rx.shift();
+        tx.shift();
+      }
+      lbl.push(new Date(p.ts).toLocaleTimeString());
+      rx.push(p.rx_mbps);
+      tx.push(p.tx_mbps);
+      chart.update("none");
+    });
 });
-socket.on('wan:status',function(s){renderWanStatus(s);});
+socket.on("wan:status", function (s) {
+  renderWanStatus(s);
+});
 
 // ── Reconnect ──────────────────────────────────────────────────────────────
 var _rosCurrentlyDisconnected = false;
 
 // ── Settings: page visibility + alert thresholds ─────────────────────────────
 var PAGE_NAV_MAP = {
-  pageWireless:'wireless', pageInterfaces:'interfaces', pageDhcp:'dhcp',
-  pageVpn:'vpn', pageConnections:'connections', pageFirewall:'firewall', pageLogs:'logs',
-  pageBandwidth:'bandwidth', pageRouting:'routing',
+  pageWireless: "wireless",
+  pageInterfaces: "interfaces",
+  pageDhcp: "dhcp",
+  pageVpn: "vpn",
+  pageConnections: "connections",
+  pageFirewall: "firewall",
+  pageLogs: "logs",
+  pageBandwidth: "bandwidth",
+  pageRouting: "routing",
 };
 
 // Alert thresholds — updated live from settings:pages broadcasts
 var _alertCpuThreshold = 90;
-var _alertPingLoss     = 100;
+var _alertPingLoss = 100;
 
 function applyPageVisibility(pages) {
   for (var key in PAGE_NAV_MAP) {
     var pageName = PAGE_NAV_MAP[key];
-    var navEl = document.querySelector('.nav-item[data-page="'+pageName+'"]');
+    var navEl = document.querySelector(
+      '.nav-item[data-page="' + pageName + '"]',
+    );
     var visible = pages[key] !== false;
-    if (navEl) navEl.style.display = visible ? '' : 'none';
+    if (navEl) navEl.style.display = visible ? "" : "none";
     // If currently on a now-hidden page, redirect to dashboard
-    if (!visible && _currentPage === pageName) showPage('dashboard');
+    if (!visible && _currentPage === pageName) showPage("dashboard");
   }
-  if (pages.alertCpuThreshold != null) _alertCpuThreshold = pages.alertCpuThreshold;
-  if (pages.alertPingLoss     != null) _alertPingLoss     = pages.alertPingLoss;
+  if (pages.alertCpuThreshold != null)
+    _alertCpuThreshold = pages.alertCpuThreshold;
+  if (pages.alertPingLoss != null) _alertPingLoss = pages.alertPingLoss;
 }
-socket.on('settings:pages', function(pages) { applyPageVisibility(pages); });
-
-socket.on('disconnect',function(){
-  reconnectBanner.classList.add('show');
-  rosBanner.classList.remove('show');
-  document.body.classList.add('is-disconnected');
+socket.on("settings:pages", function (pages) {
+  applyPageVisibility(pages);
 });
-socket.on('connect',function(){
-  reconnectBanner.classList.remove('show');
-  document.body.classList.remove('is-disconnected');
-  _sysMetaWritten=false;
-  currentIf=''; allPoints=[];
-  if(_rosCurrentlyDisconnected) rosBanner.classList.add('show');
+
+socket.on("disconnect", function () {
+  reconnectBanner.classList.add("show");
+  rosBanner.classList.remove("show");
+  document.body.classList.add("is-disconnected");
+});
+socket.on("connect", function () {
+  reconnectBanner.classList.remove("show");
+  document.body.classList.remove("is-disconnected");
+  _sysMetaWritten = false;
+  currentIf = "";
+  allPoints = [];
+  if (_rosCurrentlyDisconnected) rosBanner.classList.add("show");
 });
 
 // ── RouterOS connection status ──────────────────────────────────────────────
 // Shown when the server is up (Socket.IO connected) but RouterOS itself is
 // not reachable. Distinct from the red reconnect banner which fires when
 // the browser loses its Socket.IO connection to the MikroDash server.
-function setRosBanner(connected, reason){
-  if(!rosBanner) return;
+function setRosBanner(connected, reason) {
+  if (!rosBanner) return;
   _rosCurrentlyDisconnected = !connected;
-  if(connected){
-    rosBanner.classList.remove('show');
-    document.body.classList.remove('is-disconnected');
+  if (connected) {
+    rosBanner.classList.remove("show");
+    document.body.classList.remove("is-disconnected");
   } else {
-    if(rosBannerText) rosBannerText.textContent = reason || 'RouterOS not connected — retrying…';
-    if(!reconnectBanner.classList.contains('show')) rosBanner.classList.add('show');
-    document.body.classList.add('is-disconnected');
+    if (rosBannerText)
+      rosBannerText.textContent =
+        reason || "RouterOS not connected — retrying…";
+    if (!reconnectBanner.classList.contains("show"))
+      rosBanner.classList.add("show");
+    document.body.classList.add("is-disconnected");
   }
 }
-socket.on('ros:status', function(data){
+socket.on("ros:status", function (data) {
   setRosBanner(data.connected, data.reason);
 });
 
@@ -1391,243 +2559,334 @@ socket.on('ros:status', function(data){
 // Grace period added on top of pollMs before a card is considered stale.
 // traffic:update is fixed at 1 s so its threshold is also fixed.
 var STALE_GRACE = 20000; // 20 s grace on top of poll interval
-var staleConfig=[
+var staleConfig = [
   // trafficCard is handled manually below — its stale timer must only reset
   // when the update is for the currently selected interface (currentIf).
-  {cardId:'systemCard',   event:'system:update',   threshold:15000},
-  {cardId:'connCard',     event:'conn:update',      threshold:20000},
-  {cardId:'talkersCard',  event:'talkers:update',  threshold:20000},
-  {cardId:'wirelessCard', event:'wireless:update', threshold:25000},
-  {cardId:'vpnCard',      event:'vpn:update',       threshold:90000},  // streamed — heartbeat every 60s
-  {cardId:'firewallCard', event:'firewall:update', threshold:90000},  // streamed — heartbeat every 60s
-  {cardId:'ifStatusCard', event:'ifstatus:update', threshold:90000},  // streamed — heartbeat every 60s
-  {cardId:'networksCard', event:'lan:overview',    threshold:345000}, // 300s poll + 45s grace
-  {cardId:'bandwidthCard',    event:'bandwidth:update', threshold:20000},
-  {cardId:'routingProtoCard', event:'routing:update',   threshold:90000},
-  {cardId:'routingBgpCard',   event:'routing:update',   threshold:90000},
-  {cardId:'routingPeersCard',  event:'routing:update',   threshold:90000},
-  {cardId:'routingRoutesCard', event:'routing:update',   threshold:90000},
+  { cardId: "systemCard", event: "system:update", threshold: 15000 },
+  { cardId: "connCard", event: "conn:update", threshold: 20000 },
+  { cardId: "talkersCard", event: "talkers:update", threshold: 20000 },
+  { cardId: "wirelessCard", event: "wireless:update", threshold: 25000 },
+  { cardId: "vpnCard", event: "vpn:update", threshold: 90000 }, // streamed — heartbeat every 60s
+  { cardId: "firewallCard", event: "firewall:update", threshold: 90000 }, // streamed — heartbeat every 60s
+  { cardId: "ifStatusCard", event: "ifstatus:update", threshold: 90000 }, // streamed — heartbeat every 60s
+  { cardId: "networksCard", event: "lan:overview", threshold: 345000 }, // 300s poll + 45s grace
+  { cardId: "bandwidthCard", event: "bandwidth:update", threshold: 20000 },
+  { cardId: "routingProtoCard", event: "routing:update", threshold: 90000 },
+  { cardId: "routingBgpCard", event: "routing:update", threshold: 90000 },
+  { cardId: "routingPeersCard", event: "routing:update", threshold: 90000 },
+  { cardId: "routingRoutesCard", event: "routing:update", threshold: 90000 },
 ];
-var staleTimers={};
-staleConfig.forEach(function(cfg){
-  staleTimers[cfg.cardId]=0;
-  socket.on(cfg.event,function(data){
-    staleTimers[cfg.cardId]=Date.now();
-    var card=$(cfg.cardId);if(card)card.classList.remove('is-stale');
+var staleTimers = {};
+staleConfig.forEach(function (cfg) {
+  staleTimers[cfg.cardId] = 0;
+  socket.on(cfg.event, function (data) {
+    staleTimers[cfg.cardId] = Date.now();
+    var card = $(cfg.cardId);
+    if (card) card.classList.remove("is-stale");
     // Dynamically update threshold from server-reported poll interval.
     // pollMs===0 means the collector is streamed (not polled) — keep the
     // fixed threshold so the heartbeat cadence controls stale detection.
-    if(data&&data.pollMs){
-      cfg.threshold=data.pollMs+STALE_GRACE;
+    if (data && data.pollMs) {
+      cfg.threshold = data.pollMs + STALE_GRACE;
     }
   });
 });
 // networksCard shows live ping stats (10s) — also reset its stale timer on ping:update
 // so it never goes stale while ping is actively flowing.
-socket.on('ping:update', function() {
-  staleTimers['networksCard'] = Date.now();
-  var card = $('networksCard'); if (card) card.classList.remove('is-stale');
+socket.on("ping:update", function () {
+  staleTimers["networksCard"] = Date.now();
+  var card = $("networksCard");
+  if (card) card.classList.remove("is-stale");
 });
 
 // trafficCard stale timer: only reset when the update is for the currently
 // displayed interface. This prevents stale data from a previous router
 // (arriving briefly after a hot-swap) from holding the timer alive while
 // the chart is already blank and waiting for the new router's data.
-staleTimers['trafficCard'] = 0;
-socket.on('traffic:update', function(sample) {
+staleTimers["trafficCard"] = 0;
+socket.on("traffic:update", function (sample) {
   if (currentIf && sample.ifName === currentIf) {
-    staleTimers['trafficCard'] = Date.now();
-    var tc = $('trafficCard'); if (tc) tc.classList.remove('is-stale');
+    staleTimers["trafficCard"] = Date.now();
+    var tc = $("trafficCard");
+    if (tc) tc.classList.remove("is-stale");
   }
 });
 
-setInterval(function(){
-  var now=Date.now();
-  staleConfig.forEach(function(cfg){
-    var last=staleTimers[cfg.cardId],card=$(cfg.cardId);
-    if(!card)return;
-    if(last>0&&now-last>cfg.threshold)card.classList.add('is-stale');
+setInterval(function () {
+  var now = Date.now();
+  staleConfig.forEach(function (cfg) {
+    var last = staleTimers[cfg.cardId],
+      card = $(cfg.cardId);
+    if (!card) return;
+    if (last > 0 && now - last > cfg.threshold) card.classList.add("is-stale");
   });
-},3000);
+}, 3000);
 
 // ── Ping / Latency ─────────────────────────────────────────────────────────
 var pingChartNet = null;
-var pingHistory = [], MAX_PING_HIST = 60;
+var pingHistory = [],
+  MAX_PING_HIST = 60;
 
-function pingColor(rtt){
-  if(rtt==null)return'rgba(148,163,190,.4)';
-  if(rtt<50)return'rgba(74,222,128,.8)';
-  if(rtt<150)return'rgba(251,146,60,.8)';
-  return'rgba(248,113,113,.8)';
+function pingColor(rtt) {
+  if (rtt == null) return "rgba(148,163,190,.4)";
+  if (rtt < 50) return "rgba(74,222,128,.8)";
+  if (rtt < 150) return "rgba(251,146,60,.8)";
+  return "rgba(248,113,113,.8)";
 }
-function rttClass(rtt){
-  if(rtt==null)return'';
-  if(rtt<50)return'ping-ok';
-  if(rtt<150)return'ping-warn';
-  return'ping-bad';
+function rttClass(rtt) {
+  if (rtt == null) return "";
+  if (rtt < 50) return "ping-ok";
+  if (rtt < 150) return "ping-warn";
+  return "ping-bad";
 }
-function makePingChart(canvasId){
-  var ctx=document.getElementById(canvasId);
-  if(!ctx)return null;
-  return new Chart(ctx,{
-    type:'bar',
-    data:{labels:[],datasets:[{data:[],backgroundColor:[],borderRadius:2,borderSkipped:false}]},
-    options:{
-      responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{display:false},tooltip:{
-        callbacks:{label:function(c){return c.raw==null?'timeout':c.raw+'ms';}}}},
-      scales:{
-        x:{display:false},
-        y:{display:true,min:0,grid:{color:'rgba(99,130,190,.08)'},
-           ticks:{color:'rgba(148,163,190,.5)',font:{size:9},maxTicksLimit:3,callback:function(v){return v+'ms';}}}
-      }
-    }
+function makePingChart(canvasId) {
+  var ctx = document.getElementById(canvasId);
+  if (!ctx) return null;
+  return new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: [],
+      datasets: [
+        {
+          data: [],
+          backgroundColor: [],
+          borderRadius: 2,
+          borderSkipped: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function (c) {
+              return c.raw == null ? "timeout" : c.raw + "ms";
+            },
+          },
+        },
+      },
+      scales: {
+        x: { display: false },
+        y: {
+          display: true,
+          min: 0,
+          grid: { color: "rgba(99,130,190,.08)" },
+          ticks: {
+            color: "rgba(148,163,190,.5)",
+            font: { size: 9 },
+            maxTicksLimit: 3,
+            callback: function (v) {
+              return v + "ms";
+            },
+          },
+        },
+      },
+    },
   });
 }
-function updatePingChart(chart,history){
-  if(!chart)return;
-  var pts=history.slice(-50);
-  chart.data.labels=pts.map(function(p){return'';});
-  chart.data.datasets[0].data=pts.map(function(p){return p.rtt;});
-  chart.data.datasets[0].backgroundColor=pts.map(function(p){return pingColor(p.rtt);});
-  chart.update('none');
+function updatePingChart(chart, history) {
+  if (!chart) return;
+  var pts = history.slice(-50);
+  chart.data.labels = pts.map(function (p) {
+    return "";
+  });
+  chart.data.datasets[0].data = pts.map(function (p) {
+    return p.rtt;
+  });
+  chart.data.datasets[0].backgroundColor = pts.map(function (p) {
+    return pingColor(p.rtt);
+  });
+  chart.update("none");
 }
-function renderPingUI(rtt, loss){
-  var rttEl=$('ndPingRtt'),lossEl=$('ndPingLoss');
-  if(rttEl){
-    rttEl.textContent=rtt!=null?rtt:'—';
-    rttEl.className='ping-val '+rttClass(rtt);
+function renderPingUI(rtt, loss) {
+  var rttEl = $("ndPingRtt"),
+    lossEl = $("ndPingLoss");
+  if (rttEl) {
+    rttEl.textContent = rtt != null ? rtt : "—";
+    rttEl.className = "ping-val " + rttClass(rtt);
   }
-  if(lossEl){
-    lossEl.textContent=loss+'%';
-    lossEl.className='ping-val '+(loss===0?'ping-ok':loss<50?'ping-warn':'ping-bad');
+  if (lossEl) {
+    lossEl.textContent = loss + "%";
+    lossEl.className =
+      "ping-val " +
+      (loss === 0 ? "ping-ok" : loss < 50 ? "ping-warn" : "ping-bad");
   }
-  if(!pingChartNet)pingChartNet=makePingChart('pingChartNet');
-  updatePingChart(pingChartNet,pingHistory);
+  if (!pingChartNet) pingChartNet = makePingChart("pingChartNet");
+  updatePingChart(pingChartNet, pingHistory);
 }
-socket.on('ping:history',function(data){
-  pingHistory=(data.history||[]).slice(-MAX_PING_HIST);
-  var lbl=$('pingTargetLabel'); if(lbl&&data.target) lbl.textContent=data.target;
-  if(pingHistory.length){
-    var last=pingHistory[pingHistory.length-1];
+socket.on("ping:history", function (data) {
+  pingHistory = (data.history || []).slice(-MAX_PING_HIST);
+  var lbl = $("pingTargetLabel");
+  if (lbl && data.target) lbl.textContent = data.target;
+  if (pingHistory.length) {
+    var last = pingHistory[pingHistory.length - 1];
     renderPingUI(last.rtt, last.loss);
   }
 });
-socket.on('ping:update',function(data){
-  var rtt=data.rtt, loss=data.loss;
-  var lbl=$('pingTargetLabel'); if(lbl&&data.target) lbl.textContent=data.target;
-  pingHistory.push({ts:data.ts||Date.now(), rtt:rtt, loss:loss});
-  if(pingHistory.length>MAX_PING_HIST)pingHistory.shift();
+socket.on("ping:update", function (data) {
+  var rtt = data.rtt,
+    loss = data.loss;
+  var lbl = $("pingTargetLabel");
+  if (lbl && data.target) lbl.textContent = data.target;
+  pingHistory.push({ ts: data.ts || Date.now(), rtt: rtt, loss: loss });
+  if (pingHistory.length > MAX_PING_HIST) pingHistory.shift();
   renderPingUI(rtt, loss);
 });
 
 // ── Browser Notifications ──────────────────────────────────────────────────
 var _notifEnabled = false;
-var _notifPrevIface = {};   // name -> wasRunning
-var _notifPrevVpn   = {};   // name -> wasConnected
-var _cpuAlertedAt   = 0;
-var _pingAlertedAt  = 0;
-var NOTIF_COOLDOWN  = 60000; // 1 min between repeat alerts
+var _notifPrevIface = {}; // name -> wasRunning
+var _notifPrevVpn = {}; // name -> wasConnected
+var _cpuAlertedAt = 0;
+var _pingAlertedAt = 0;
+var NOTIF_COOLDOWN = 60000; // 1 min between repeat alerts
 
-function notifSupported(){ return 'Notification' in window; }
-
-function sendNotif(title, body, tag){
-  if(!_notifEnabled) return;
-  try{ new Notification(title,{body:body,tag:tag,icon:'/logo.png',silent:false}); }catch(e){}
+function notifSupported() {
+  return "Notification" in window;
 }
 
-function initNotifications(){
-  if(!notifSupported()) return;
-  Notification.requestPermission().then(function(p){
-    _notifEnabled = (p === 'granted');
-    var btn = $('notifToggleBtn');
-    if(btn) updateNotifBtn();
+function sendNotif(title, body, tag) {
+  if (!_notifEnabled) return;
+  try {
+    new Notification(title, {
+      body: body,
+      tag: tag,
+      icon: "/logo.png",
+      silent: false,
+    });
+  } catch (e) {}
+}
+
+function initNotifications() {
+  if (!notifSupported()) return;
+  Notification.requestPermission().then(function (p) {
+    _notifEnabled = p === "granted";
+    var btn = $("notifToggleBtn");
+    if (btn) updateNotifBtn();
   });
 }
 
-function updateNotifBtn(){
-  var btn = $('notifToggleBtn');
-  if(!btn) return;
-  if(!notifSupported()){btn.style.display='none';return;}
-  btn.title = _notifEnabled ? 'Notifications on' : 'Notifications off';
+function updateNotifBtn() {
+  var btn = $("notifToggleBtn");
+  if (!btn) return;
+  if (!notifSupported()) {
+    btn.style.display = "none";
+    return;
+  }
+  btn.title = _notifEnabled ? "Notifications on" : "Notifications off";
   var sz = 'width="16" height="16"';
   btn.innerHTML = _notifEnabled
-    ? '<svg '+sz+' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
-    : '<svg '+sz+' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
-  btn.style.color = _notifEnabled ? 'var(--accent-rx)' : 'var(--text-main)';
-  btn.style.opacity = _notifEnabled ? '1' : '0.4';
+    ? "<svg " +
+      sz +
+      ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
+    : "<svg " +
+      sz +
+      ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+  btn.style.color = _notifEnabled ? "var(--accent-rx)" : "var(--text-main)";
+  btn.style.opacity = _notifEnabled ? "1" : "0.4";
 }
 
 // Trigger notifications from data events
-function checkIfaceNotifs(ifaces){
-  ifaces.forEach(function(i){
-    if(i.disabled) return;
+function checkIfaceNotifs(ifaces) {
+  ifaces.forEach(function (i) {
+    if (i.disabled) return;
     var wasRunning = _notifPrevIface[i.name];
-    var isRunning  = !!i.running;
-    if(wasRunning === true && !isRunning){
-      sendNotif('Interface Down', i.name + ' is no longer running', 'iface-' + i.name);
-    } else if(wasRunning === false && isRunning){
-      sendNotif('Interface Up', i.name + ' is back online', 'iface-' + i.name);
+    var isRunning = !!i.running;
+    if (wasRunning === true && !isRunning) {
+      sendNotif(
+        "Interface Down",
+        i.name + " is no longer running",
+        "iface-" + i.name,
+      );
+    } else if (wasRunning === false && isRunning) {
+      sendNotif("Interface Up", i.name + " is back online", "iface-" + i.name);
     }
     _notifPrevIface[i.name] = isRunning;
   });
 }
 
-function checkVpnNotifs(tunnels){
-  tunnels.forEach(function(t){
-    var name = t.name || t.interface || '?';
-    var isConn = t.state === 'connected';
+function checkVpnNotifs(tunnels) {
+  tunnels.forEach(function (t) {
+    var name = t.name || t.interface || "?";
+    var isConn = t.state === "connected";
     var wasConn = _notifPrevVpn[name];
-    if(wasConn === true && !isConn){
-      sendNotif('VPN Peer Disconnected', name + ' has gone idle', 'vpn-' + name);
-    } else if(wasConn === false && isConn){
-      sendNotif('VPN Peer Connected', name + ' is now active', 'vpn-' + name);
+    if (wasConn === true && !isConn) {
+      sendNotif(
+        "VPN Peer Disconnected",
+        name + " has gone idle",
+        "vpn-" + name,
+      );
+    } else if (wasConn === false && isConn) {
+      sendNotif("VPN Peer Connected", name + " is now active", "vpn-" + name);
     }
     _notifPrevVpn[name] = isConn;
   });
 }
 
-function checkCpuNotif(cpuLoad){
+function checkCpuNotif(cpuLoad) {
   var now = Date.now();
-  if(cpuLoad >= _alertCpuThreshold && now - _cpuAlertedAt > NOTIF_COOLDOWN){
-    sendNotif('High CPU', 'Router CPU at ' + cpuLoad + '% (threshold: ' + _alertCpuThreshold + '%)', 'cpu-high');
+  if (cpuLoad >= _alertCpuThreshold && now - _cpuAlertedAt > NOTIF_COOLDOWN) {
+    sendNotif(
+      "High CPU",
+      "Router CPU at " + cpuLoad + "% (threshold: " + _alertCpuThreshold + "%)",
+      "cpu-high",
+    );
     _cpuAlertedAt = now;
   }
 }
 
-function checkPingNotif(loss){
+function checkPingNotif(loss) {
   var now = Date.now();
-  if(loss >= _alertPingLoss && now - _pingAlertedAt > NOTIF_COOLDOWN){
-    sendNotif('Ping Loss', 'Ping loss at ' + loss + '% — possible WAN outage', 'ping-loss');
+  if (loss >= _alertPingLoss && now - _pingAlertedAt > NOTIF_COOLDOWN) {
+    sendNotif(
+      "Ping Loss",
+      "Ping loss at " + loss + "% — possible WAN outage",
+      "ping-loss",
+    );
     _pingAlertedAt = now;
   }
-  if(loss < _alertPingLoss) _pingAlertedAt = 0; // reset so next outage fires again
+  if (loss < _alertPingLoss) _pingAlertedAt = 0; // reset so next outage fires again
 }
 
 // Wire into existing handlers
 var _origIfstatus = null;
-(function(){
+(function () {
   var _listeners = [];
-  socket.on('ifstatus:update', function(data){ checkIfaceNotifs(data.interfaces||[]); });
-  socket.on('vpn:update',      function(data){ checkVpnNotifs(data.tunnels||[]); });
-  socket.on('system:update',   function(d){    checkCpuNotif(d.cpuLoad); });
-  socket.on('ping:update',     function(data){ checkPingNotif(data.loss); });
+  socket.on("ifstatus:update", function (data) {
+    checkIfaceNotifs(data.interfaces || []);
+  });
+  socket.on("vpn:update", function (data) {
+    checkVpnNotifs(data.tunnels || []);
+  });
+  socket.on("system:update", function (d) {
+    checkCpuNotif(d.cpuLoad);
+  });
+  socket.on("ping:update", function (data) {
+    checkPingNotif(data.loss);
+  });
 })();
 
 initNotifications();
 
 // ── Topbar clock ───────────────────────────────────────────────────────────
-(function(){
-  var el = $('tobarClock');
-  if(!el) return;
-  var _clockLast='';
-  function tick(){
+(function () {
+  var el = $("tobarClock");
+  if (!el) return;
+  var _clockLast = "";
+  function tick() {
     var now = new Date();
-    var h = now.getHours().toString().padStart(2,'0');
-    var m = now.getMinutes().toString().padStart(2,'0');
-    var s = now.getSeconds().toString().padStart(2,'0');
-    var str=h+':'+m+':'+s;
-    if(str!==_clockLast){ _clockLast=str; el.textContent=str; }
+    var h = now.getHours().toString().padStart(2, "0");
+    var m = now.getMinutes().toString().padStart(2, "0");
+    var s = now.getSeconds().toString().padStart(2, "0");
+    var str = h + ":" + m + ":" + s;
+    if (str !== _clockLast) {
+      _clockLast = str;
+      el.textContent = str;
+    }
   }
   tick();
   setInterval(tick, 1000);
@@ -1637,310 +2896,816 @@ initNotifications();
 var _notifHistory = [];
 var MAX_NOTIF_HIST = 50;
 
-function addNotifHistory(title, body){
+function addNotifHistory(title, body) {
   var ts = Date.now();
-  _notifHistory.unshift({title:title, body:body, ts:ts});
-  if(_notifHistory.length > MAX_NOTIF_HIST) _notifHistory.pop();
+  _notifHistory.unshift({ title: title, body: body, ts: ts });
+  if (_notifHistory.length > MAX_NOTIF_HIST) _notifHistory.pop();
   renderNotifPanel();
-  var dot = $('notifDot'); if(dot) dot.style.display = 'block';
+  var dot = $("notifDot");
+  if (dot) dot.style.display = "block";
 }
 
-function renderNotifPanel(){
-  var list = $('notifList'); if(!list) return;
-  if(!_notifHistory.length){
+function renderNotifPanel() {
+  var list = $("notifList");
+  if (!list) return;
+  if (!_notifHistory.length) {
     list.innerHTML = '<div class="notif-empty">No alerts yet</div>';
     return;
   }
-  list.innerHTML = _notifHistory.map(function(n){
-    var age = Date.now() - n.ts;
-    var ageStr = age < 60000 ? 'just now'
-      : age < 3600000 ? Math.floor(age/60000)+'m ago'
-      : Math.floor(age/3600000)+'h ago';
-    return '<div class="notif-item">'+
-      '<div class="notif-item-title">'+esc(n.title)+'</div>'+
-      '<div class="notif-item-body">'+esc(n.body)+'</div>'+
-      '<div class="notif-item-time">'+ageStr+'</div>'+
-    '</div>';
-  }).join('');
+  list.innerHTML = _notifHistory
+    .map(function (n) {
+      var age = Date.now() - n.ts;
+      var ageStr =
+        age < 60000
+          ? "just now"
+          : age < 3600000
+            ? Math.floor(age / 60000) + "m ago"
+            : Math.floor(age / 3600000) + "h ago";
+      return (
+        '<div class="notif-item">' +
+        '<div class="notif-item-title">' +
+        esc(n.title) +
+        "</div>" +
+        '<div class="notif-item-body">' +
+        esc(n.body) +
+        "</div>" +
+        '<div class="notif-item-time">' +
+        ageStr +
+        "</div>" +
+        "</div>"
+      );
+    })
+    .join("");
 }
 
 // Hook into sendNotif to also record history
 var _origSendNotif = sendNotif;
-sendNotif = function(title, body, tag){
+sendNotif = function (title, body, tag) {
   _origSendNotif(title, body, tag);
   addNotifHistory(title, body);
 };
 
 // Sync the bell icon to the current notification permission state on load,
 // so it is never stuck showing the hardcoded HTML default from index.html.
-(function(){
-  if('Notification' in window && Notification.permission === 'granted'){
+(function () {
+  if ("Notification" in window && Notification.permission === "granted") {
     _notifEnabled = true;
   }
   updateNotifBtn();
 })();
 
 // Bell button: click opens/closes panel (no longer just toggles enable)
-(function(){
-  var btn   = $('notifToggleBtn');
-  var panel = $('notifPanel');
-  var dot   = $('notifDot');
-  if(!btn || !panel) return;
+(function () {
+  var btn = $("notifToggleBtn");
+  var panel = $("notifPanel");
+  var dot = $("notifDot");
+  if (!btn || !panel) return;
 
-  btn.addEventListener('click', function(e){
+  btn.addEventListener("click", function (e) {
     e.stopPropagation();
-    var isOpen = panel.classList.contains('open');
-    if(isOpen){
-      panel.classList.remove('open');
+    var isOpen = panel.classList.contains("open");
+    if (isOpen) {
+      panel.classList.remove("open");
     } else {
-      panel.classList.add('open');
-      if(dot) dot.style.display = 'none';
+      panel.classList.add("open");
+      if (dot) dot.style.display = "none";
       renderNotifPanel(); // refresh age strings
     }
   });
 
-  document.addEventListener('click', function(e){
-    if(!panel.contains(e.target) && e.target !== btn){
-      panel.classList.remove('open');
+  document.addEventListener("click", function (e) {
+    if (!panel.contains(e.target) && e.target !== btn) {
+      panel.classList.remove("open");
     }
   });
 
-  var clearBtn = $('notifClearBtn');
-  if(clearBtn) clearBtn.addEventListener('click', function(){
-    _notifHistory = [];
-    renderNotifPanel();
-    if(dot) dot.style.display = 'none';
-  });
+  var clearBtn = $("notifClearBtn");
+  if (clearBtn)
+    clearBtn.addEventListener("click", function () {
+      _notifHistory = [];
+      renderNotifPanel();
+      if (dot) dot.style.display = "none";
+    });
 })();
 
 // ── World Map (Connections page) ───────────────────────────────────────────
-(function(){
-  var mapEl     = $('worldMap');
-  var tooltipEl = $('mapTooltip');
-  if(!mapEl) return;
+(function () {
+  var mapEl = $("worldMap");
+  var tooltipEl = $("mapTooltip");
+  if (!mapEl) return;
 
-var MAP_URL = '/vendor/world-atlas/countries-110m.json';
-  var W=1000, H=500;
+  var MAP_URL = "/vendor/world-atlas/countries-110m.json";
+  var W = 1000,
+    H = 500;
 
-  var _countryCounts  = {};   // cc -> total count
-  var _countryProto   = {};   // cc -> {tcp,udp,other}
-  var _countryCity    = {};   // cc -> city
-  var _pathEls        = {};   // cc -> SVG path element
-  var _centroids      = {};   // cc -> [x,y] projected centroid
-  var _arcEls         = {};   // cc -> SVG path element (arc line)
-  var _labelEls       = {};   // cc -> SVG text element
-  var _sparkData      = {};   // cc -> ring array of counts (last 20 polls)
-  var _selectedCC     = null;
-  var _arcLayer       = null;
-  var _labelLayer     = null;
-  var _localCC        = 'ZZ'; // will be detected from first geo data or env
+  var _countryCounts = {}; // cc -> total count
+  var _countryProto = {}; // cc -> {tcp,udp,other}
+  var _countryCity = {}; // cc -> city
+  var _pathEls = {}; // cc -> SVG path element
+  var _centroids = {}; // cc -> [x,y] projected centroid
+  var _arcEls = {}; // cc -> SVG path element (arc line)
+  var _labelEls = {}; // cc -> SVG text element
+  var _sparkData = {}; // cc -> ring array of counts (last 20 polls)
+  var _selectedCC = null;
+  var _arcLayer = null;
+  var _labelLayer = null;
+  var _localCC = "ZZ"; // will be detected from first geo data or env
   var _lastConnPayload = null; // full conn:update payload — used for country filter re-render
 
   // Known port names
-  var PORT_NAMES = {'80':'HTTP','443':'HTTPS','53':'DNS','22':'SSH','21':'FTP',
-    '25':'SMTP','587':'SMTP','993':'IMAP','995':'POP3','3389':'RDP','1194':'OpenVPN',
-    '51820':'WireGuard','8080':'HTTP-alt','8443':'HTTPS-alt','123':'NTP','67':'DHCP',
-    '110':'POP3','143':'IMAP','5353':'mDNS','1900':'UPnP'};
+  var PORT_NAMES = {
+    80: "HTTP",
+    443: "HTTPS",
+    53: "DNS",
+    22: "SSH",
+    21: "FTP",
+    25: "SMTP",
+    587: "SMTP",
+    993: "IMAP",
+    995: "POP3",
+    3389: "RDP",
+    1194: "OpenVPN",
+    51820: "WireGuard",
+    8080: "HTTP-alt",
+    8443: "HTTPS-alt",
+    123: "NTP",
+    67: "DHCP",
+    110: "POP3",
+    143: "IMAP",
+    5353: "mDNS",
+    1900: "UPnP",
+  };
 
-  var NUM_TO_ISO2 = {4:'AF',8:'AL',12:'DZ',24:'AO',32:'AR',36:'AU',40:'AT',50:'BD',
-    56:'BE',64:'BT',68:'BO',76:'BR',100:'BG',104:'MM',116:'KH',120:'CM',124:'CA',
-    144:'LK',152:'CL',156:'CN',170:'CO',180:'CD',188:'CR',191:'HR',192:'CU',196:'CY',
-    203:'CZ',204:'BJ',208:'DK',214:'DO',218:'EC',818:'EG',222:'SV',231:'ET',246:'FI',
-    250:'FR',266:'GA',276:'DE',288:'GH',300:'GR',320:'GT',332:'HT',340:'HN',348:'HU',
-    356:'IN',360:'ID',364:'IR',368:'IQ',372:'IE',376:'IL',380:'IT',388:'JM',392:'JP',
-    400:'JO',404:'KE',408:'KP',410:'KR',414:'KW',418:'LA',422:'LB',430:'LR',434:'LY',
-    442:'LU',484:'MX',504:'MA',508:'MZ',516:'NA',524:'NP',528:'NL',540:'NC',554:'NZ',
-    558:'NI',566:'NG',578:'NO',586:'PK',591:'PA',598:'PG',604:'PE',608:'PH',616:'PL',
-    620:'PT',630:'PR',634:'QA',642:'RO',643:'RU',682:'SA',686:'SN',694:'SL',706:'SO',
-    710:'ZA',724:'ES',729:'SD',752:'SE',756:'CH',760:'SY',762:'TJ',764:'TH',792:'TR',
-    800:'UG',804:'UA',784:'AE',826:'GB',840:'US',858:'UY',860:'UZ',862:'VE',704:'VN',
-    887:'YE',894:'ZM',716:'ZW',70:'BA',807:'MK',499:'ME',688:'RS',51:'AM',31:'AZ',
-    112:'BY',268:'GE',398:'KZ',417:'KG',498:'MD',496:'MN',795:'TM'};
+  var NUM_TO_ISO2 = {
+    4: "AF",
+    8: "AL",
+    12: "DZ",
+    24: "AO",
+    32: "AR",
+    36: "AU",
+    40: "AT",
+    50: "BD",
+    56: "BE",
+    64: "BT",
+    68: "BO",
+    76: "BR",
+    100: "BG",
+    104: "MM",
+    116: "KH",
+    120: "CM",
+    124: "CA",
+    144: "LK",
+    152: "CL",
+    156: "CN",
+    170: "CO",
+    180: "CD",
+    188: "CR",
+    191: "HR",
+    192: "CU",
+    196: "CY",
+    203: "CZ",
+    204: "BJ",
+    208: "DK",
+    214: "DO",
+    218: "EC",
+    818: "EG",
+    222: "SV",
+    231: "ET",
+    246: "FI",
+    250: "FR",
+    266: "GA",
+    276: "DE",
+    288: "GH",
+    300: "GR",
+    320: "GT",
+    332: "HT",
+    340: "HN",
+    348: "HU",
+    356: "IN",
+    360: "ID",
+    364: "IR",
+    368: "IQ",
+    372: "IE",
+    376: "IL",
+    380: "IT",
+    388: "JM",
+    392: "JP",
+    400: "JO",
+    404: "KE",
+    408: "KP",
+    410: "KR",
+    414: "KW",
+    418: "LA",
+    422: "LB",
+    430: "LR",
+    434: "LY",
+    442: "LU",
+    484: "MX",
+    504: "MA",
+    508: "MZ",
+    516: "NA",
+    524: "NP",
+    528: "NL",
+    540: "NC",
+    554: "NZ",
+    558: "NI",
+    566: "NG",
+    578: "NO",
+    586: "PK",
+    591: "PA",
+    598: "PG",
+    604: "PE",
+    608: "PH",
+    616: "PL",
+    620: "PT",
+    630: "PR",
+    634: "QA",
+    642: "RO",
+    643: "RU",
+    682: "SA",
+    686: "SN",
+    694: "SL",
+    706: "SO",
+    710: "ZA",
+    724: "ES",
+    729: "SD",
+    752: "SE",
+    756: "CH",
+    760: "SY",
+    762: "TJ",
+    764: "TH",
+    792: "TR",
+    800: "UG",
+    804: "UA",
+    784: "AE",
+    826: "GB",
+    840: "US",
+    858: "UY",
+    860: "UZ",
+    862: "VE",
+    704: "VN",
+    887: "YE",
+    894: "ZM",
+    716: "ZW",
+    70: "BA",
+    807: "MK",
+    499: "ME",
+    688: "RS",
+    51: "AM",
+    31: "AZ",
+    112: "BY",
+    268: "GE",
+    398: "KZ",
+    417: "KG",
+    498: "MD",
+    496: "MN",
+    795: "TM",
+  };
 
   // ISO2 -> approx centroid [lon, lat] for arc origin/destination
   var CC_NAMES = {
-    AF:'Afghanistan',AL:'Albania',DZ:'Algeria',AO:'Angola',AR:'Argentina',AU:'Australia',
-    AT:'Austria',BD:'Bangladesh',BE:'Belgium',BO:'Bolivia',BR:'Brazil',BG:'Bulgaria',
-    MM:'Myanmar',KH:'Cambodia',CM:'Cameroon',CA:'Canada',LK:'Sri Lanka',CL:'Chile',
-    CN:'China',CO:'Colombia',CD:'DR Congo',CR:'Costa Rica',HR:'Croatia',CU:'Cuba',
-    CY:'Cyprus',CZ:'Czechia',DK:'Denmark',DO:'Dominican Rep.',EC:'Ecuador',EG:'Egypt',
-    SV:'El Salvador',ET:'Ethiopia',FI:'Finland',FR:'France',GA:'Gabon',DE:'Germany',
-    GH:'Ghana',GR:'Greece',GT:'Guatemala',HT:'Haiti',HN:'Honduras',HU:'Hungary',
-    IN:'India',ID:'Indonesia',IR:'Iran',IQ:'Iraq',IE:'Ireland',IL:'Israel',IT:'Italy',
-    JM:'Jamaica',JP:'Japan',JO:'Jordan',KE:'Kenya',KP:'North Korea',KR:'South Korea',
-    KW:'Kuwait',LA:'Laos',LB:'Lebanon',LR:'Liberia',LY:'Libya',LU:'Luxembourg',
-    MX:'Mexico',MA:'Morocco',MZ:'Mozambique',NA:'Namibia',NP:'Nepal',NL:'Netherlands',
-    NZ:'New Zealand',NI:'Nicaragua',NG:'Nigeria',NO:'Norway',PK:'Pakistan',PA:'Panama',
-    PG:'Papua New Guinea',PE:'Peru',PH:'Philippines',PL:'Poland',PT:'Portugal',
-    QA:'Qatar',RO:'Romania',RU:'Russia',SA:'Saudi Arabia',SN:'Senegal',SO:'Somalia',
-    ZA:'South Africa',ES:'Spain',SD:'Sudan',SE:'Sweden',CH:'Switzerland',SY:'Syria',
-    TH:'Thailand',TR:'Turkey',UG:'Uganda',UA:'Ukraine',AE:'UAE',GB:'United Kingdom',
-    US:'United States',UY:'Uruguay',VE:'Venezuela',VN:'Vietnam',YE:'Yemen',
-    ZM:'Zambia',ZW:'Zimbabwe',BA:'Bosnia',RS:'Serbia',BY:'Belarus',GE:'Georgia',
-    KZ:'Kazakhstan',MN:'Mongolia',TJ:'Tajikistan',TM:'Turkmenistan',UZ:'Uzbekistan',
-    AZ:'Azerbaijan',AM:'Armenia',MD:'Moldova',KG:'Kyrgyzstan',MK:'N. Macedonia',
-    ME:'Montenegro',NC:'New Caledonia',PR:'Puerto Rico',TZ:'Tanzania',MG:'Madagascar',
-    CI:'Ivory Coast',ML:'Mali',BF:'Burkina Faso',NE:'Niger',TD:'Chad',
-    SS:'South Sudan',CF:'Central African Rep.',GN:'Guinea',ZR:'DR Congo',
-    RW:'Rwanda',BI:'Burundi',MW:'Malawi',ZI:'Zimbabwe',MR:'Mauritania',
-    GM:'Gambia',GW:'Guinea-Bissau',SL:'Sierra Leone',GQ:'Eq. Guinea',
-    TG:'Togo',BJ:'Benin',DJ:'Djibouti',ER:'Eritrea',KM:'Comoros',
-    SC:'Seychelles',MU:'Mauritius',SZ:'Eswatini',LS:'Lesotho',BW:'Botswana',
-    ZB:'Zambia',TN:'Tunisia',LB:'Lebanon',PS:'Palestine',OM:'Oman',
-    YU:'Yugoslavia',SK:'Slovakia',SI:'Slovenia',EE:'Estonia',LV:'Latvia',
-    LT:'Lithuania',FO:'Faroe Islands',IS:'Iceland',MT:'Malta',AL:'Albania',
-    MK:'N. Macedonia',XK:'Kosovo',LI:'Liechtenstein',MC:'Monaco',SM:'San Marino',
-    VA:'Vatican',AD:'Andorra',GI:'Gibraltar',JE:'Jersey',GG:'Guernsey',IM:'Isle of Man',
-    HK:'Hong Kong',MO:'Macau',TW:'Taiwan',SG:'Singapore',BN:'Brunei',
-    TL:'Timor-Leste',MY:'Malaysia',MV:'Maldives',BT:'Bhutan',PW:'Palau',
-    FM:'Micronesia',MH:'Marshall Islands',NR:'Nauru',TV:'Tuvalu',TO:'Tonga',
-    WS:'Samoa',FJ:'Fiji',VU:'Vanuatu',SB:'Solomon Islands',KI:'Kiribati',
-    PF:'French Polynesia',GU:'Guam',AS:'American Samoa',CK:'Cook Islands',
-    NF:'Norfolk Island',CC:'Cocos Islands',CX:'Christmas Island',
-    BB:'Barbados',LC:'St. Lucia',VC:'St. Vincent',GD:'Grenada',
-    AG:'Antigua',KN:'St. Kitts',DM:'Dominica',TT:'Trinidad',
-    BS:'Bahamas',TC:'Turks & Caicos',KY:'Cayman Islands',VG:'British Virgin Islands',
-    VI:'US Virgin Islands',AW:'Aruba',CW:'Curacao',BQ:'Bonaire',SX:'Sint Maarten',
-    MX:'Mexico',BZ:'Belize',GY:'Guyana',SR:'Suriname',GF:'French Guiana',
-    PY:'Paraguay',FK:'Falkland Islands',GL:'Greenland',PM:'St. Pierre',
-    MF:'St. Martin',BL:'St. Barthélemy',GP:'Guadeloupe',MQ:'Martinique',RE:'Réunion',
-    YT:'Mayotte',TF:'French S. Territories',CG:'Republic of Congo',AO:'Angola',
-    GQ:'Eq. Guinea',ST:'São Tomé',CV:'Cape Verde',GW:'Guinea-Bissau',EH:'W. Sahara',
-    LY:'Libya',SD:'Sudan',JO:'Jordan',SY:'Syria',LB:'Lebanon',CY:'Cyprus',
-    TR:'Turkey',GE:'Georgia',AM:'Armenia',AZ:'Azerbaijan',KZ:'Kazakhstan',
-    UZ:'Uzbekistan',TM:'Turkmenistan',KG:'Kyrgyzstan',TJ:'Tajikistan',AF:'Afghanistan',
-    PK:'Pakistan',IN:'India',NP:'Nepal',BT:'Bhutan',BD:'Bangladesh',LK:'Sri Lanka',
-    MM:'Myanmar',TH:'Thailand',LA:'Laos',KH:'Cambodia',VN:'Vietnam',MY:'Malaysia'
+    AF: "Afghanistan",
+    AL: "Albania",
+    DZ: "Algeria",
+    AO: "Angola",
+    AR: "Argentina",
+    AU: "Australia",
+    AT: "Austria",
+    BD: "Bangladesh",
+    BE: "Belgium",
+    BO: "Bolivia",
+    BR: "Brazil",
+    BG: "Bulgaria",
+    MM: "Myanmar",
+    KH: "Cambodia",
+    CM: "Cameroon",
+    CA: "Canada",
+    LK: "Sri Lanka",
+    CL: "Chile",
+    CN: "China",
+    CO: "Colombia",
+    CD: "DR Congo",
+    CR: "Costa Rica",
+    HR: "Croatia",
+    CU: "Cuba",
+    CY: "Cyprus",
+    CZ: "Czechia",
+    DK: "Denmark",
+    DO: "Dominican Rep.",
+    EC: "Ecuador",
+    EG: "Egypt",
+    SV: "El Salvador",
+    ET: "Ethiopia",
+    FI: "Finland",
+    FR: "France",
+    GA: "Gabon",
+    DE: "Germany",
+    GH: "Ghana",
+    GR: "Greece",
+    GT: "Guatemala",
+    HT: "Haiti",
+    HN: "Honduras",
+    HU: "Hungary",
+    IN: "India",
+    ID: "Indonesia",
+    IR: "Iran",
+    IQ: "Iraq",
+    IE: "Ireland",
+    IL: "Israel",
+    IT: "Italy",
+    JM: "Jamaica",
+    JP: "Japan",
+    JO: "Jordan",
+    KE: "Kenya",
+    KP: "North Korea",
+    KR: "South Korea",
+    KW: "Kuwait",
+    LA: "Laos",
+    LB: "Lebanon",
+    LR: "Liberia",
+    LY: "Libya",
+    LU: "Luxembourg",
+    MX: "Mexico",
+    MA: "Morocco",
+    MZ: "Mozambique",
+    NA: "Namibia",
+    NP: "Nepal",
+    NL: "Netherlands",
+    NZ: "New Zealand",
+    NI: "Nicaragua",
+    NG: "Nigeria",
+    NO: "Norway",
+    PK: "Pakistan",
+    PA: "Panama",
+    PG: "Papua New Guinea",
+    PE: "Peru",
+    PH: "Philippines",
+    PL: "Poland",
+    PT: "Portugal",
+    QA: "Qatar",
+    RO: "Romania",
+    RU: "Russia",
+    SA: "Saudi Arabia",
+    SN: "Senegal",
+    SO: "Somalia",
+    ZA: "South Africa",
+    ES: "Spain",
+    SD: "Sudan",
+    SE: "Sweden",
+    CH: "Switzerland",
+    SY: "Syria",
+    TH: "Thailand",
+    TR: "Turkey",
+    UG: "Uganda",
+    UA: "Ukraine",
+    AE: "UAE",
+    GB: "United Kingdom",
+    US: "United States",
+    UY: "Uruguay",
+    VE: "Venezuela",
+    VN: "Vietnam",
+    YE: "Yemen",
+    ZM: "Zambia",
+    ZW: "Zimbabwe",
+    BA: "Bosnia",
+    RS: "Serbia",
+    BY: "Belarus",
+    GE: "Georgia",
+    KZ: "Kazakhstan",
+    MN: "Mongolia",
+    TJ: "Tajikistan",
+    TM: "Turkmenistan",
+    UZ: "Uzbekistan",
+    AZ: "Azerbaijan",
+    AM: "Armenia",
+    MD: "Moldova",
+    KG: "Kyrgyzstan",
+    MK: "N. Macedonia",
+    ME: "Montenegro",
+    NC: "New Caledonia",
+    PR: "Puerto Rico",
+    TZ: "Tanzania",
+    MG: "Madagascar",
+    CI: "Ivory Coast",
+    ML: "Mali",
+    BF: "Burkina Faso",
+    NE: "Niger",
+    TD: "Chad",
+    SS: "South Sudan",
+    CF: "Central African Rep.",
+    GN: "Guinea",
+    ZR: "DR Congo",
+    RW: "Rwanda",
+    BI: "Burundi",
+    MW: "Malawi",
+    ZI: "Zimbabwe",
+    MR: "Mauritania",
+    GM: "Gambia",
+    GW: "Guinea-Bissau",
+    SL: "Sierra Leone",
+    GQ: "Eq. Guinea",
+    TG: "Togo",
+    BJ: "Benin",
+    DJ: "Djibouti",
+    ER: "Eritrea",
+    KM: "Comoros",
+    SC: "Seychelles",
+    MU: "Mauritius",
+    SZ: "Eswatini",
+    LS: "Lesotho",
+    BW: "Botswana",
+    ZB: "Zambia",
+    TN: "Tunisia",
+    LB: "Lebanon",
+    PS: "Palestine",
+    OM: "Oman",
+    YU: "Yugoslavia",
+    SK: "Slovakia",
+    SI: "Slovenia",
+    EE: "Estonia",
+    LV: "Latvia",
+    LT: "Lithuania",
+    FO: "Faroe Islands",
+    IS: "Iceland",
+    MT: "Malta",
+    AL: "Albania",
+    MK: "N. Macedonia",
+    XK: "Kosovo",
+    LI: "Liechtenstein",
+    MC: "Monaco",
+    SM: "San Marino",
+    VA: "Vatican",
+    AD: "Andorra",
+    GI: "Gibraltar",
+    JE: "Jersey",
+    GG: "Guernsey",
+    IM: "Isle of Man",
+    HK: "Hong Kong",
+    MO: "Macau",
+    TW: "Taiwan",
+    SG: "Singapore",
+    BN: "Brunei",
+    TL: "Timor-Leste",
+    MY: "Malaysia",
+    MV: "Maldives",
+    BT: "Bhutan",
+    PW: "Palau",
+    FM: "Micronesia",
+    MH: "Marshall Islands",
+    NR: "Nauru",
+    TV: "Tuvalu",
+    TO: "Tonga",
+    WS: "Samoa",
+    FJ: "Fiji",
+    VU: "Vanuatu",
+    SB: "Solomon Islands",
+    KI: "Kiribati",
+    PF: "French Polynesia",
+    GU: "Guam",
+    AS: "American Samoa",
+    CK: "Cook Islands",
+    NF: "Norfolk Island",
+    CC: "Cocos Islands",
+    CX: "Christmas Island",
+    BB: "Barbados",
+    LC: "St. Lucia",
+    VC: "St. Vincent",
+    GD: "Grenada",
+    AG: "Antigua",
+    KN: "St. Kitts",
+    DM: "Dominica",
+    TT: "Trinidad",
+    BS: "Bahamas",
+    TC: "Turks & Caicos",
+    KY: "Cayman Islands",
+    VG: "British Virgin Islands",
+    VI: "US Virgin Islands",
+    AW: "Aruba",
+    CW: "Curacao",
+    BQ: "Bonaire",
+    SX: "Sint Maarten",
+    MX: "Mexico",
+    BZ: "Belize",
+    GY: "Guyana",
+    SR: "Suriname",
+    GF: "French Guiana",
+    PY: "Paraguay",
+    FK: "Falkland Islands",
+    GL: "Greenland",
+    PM: "St. Pierre",
+    MF: "St. Martin",
+    BL: "St. Barthélemy",
+    GP: "Guadeloupe",
+    MQ: "Martinique",
+    RE: "Réunion",
+    YT: "Mayotte",
+    TF: "French S. Territories",
+    CG: "Republic of Congo",
+    AO: "Angola",
+    GQ: "Eq. Guinea",
+    ST: "São Tomé",
+    CV: "Cape Verde",
+    GW: "Guinea-Bissau",
+    EH: "W. Sahara",
+    LY: "Libya",
+    SD: "Sudan",
+    JO: "Jordan",
+    SY: "Syria",
+    LB: "Lebanon",
+    CY: "Cyprus",
+    TR: "Turkey",
+    GE: "Georgia",
+    AM: "Armenia",
+    AZ: "Azerbaijan",
+    KZ: "Kazakhstan",
+    UZ: "Uzbekistan",
+    TM: "Turkmenistan",
+    KG: "Kyrgyzstan",
+    TJ: "Tajikistan",
+    AF: "Afghanistan",
+    PK: "Pakistan",
+    IN: "India",
+    NP: "Nepal",
+    BT: "Bhutan",
+    BD: "Bangladesh",
+    LK: "Sri Lanka",
+    MM: "Myanmar",
+    TH: "Thailand",
+    LA: "Laos",
+    KH: "Cambodia",
+    VN: "Vietnam",
+    MY: "Malaysia",
   };
 
-  var CC_CENTROIDS = {AF:[67.7,33.9],AL:[20.2,41.2],DZ:[2.6,28.0],AO:[17.9,-11.2],
-    AR:[-63.6,-38.4],AU:[133.8,-25.3],AT:[14.6,47.7],BD:[90.4,23.7],BE:[4.5,50.5],
-    BO:[-64.7,-17.0],BR:[-51.9,-14.2],BG:[25.5,42.7],MM:[96.7,16.9],KH:[104.9,12.6],
-    CM:[12.4,5.7],CA:[-96.8,56.1],LK:[80.8,7.9],CL:[-71.5,-35.7],CN:[104.2,35.9],
-    CO:[-74.3,4.6],CD:[23.7,-2.9],CR:[-84.2,9.7],HR:[16.4,45.1],CU:[-79.5,21.5],
-    CY:[33.4,35.1],CZ:[15.5,49.8],DK:[9.5,56.3],DO:[-70.2,18.7],EC:[-78.1,-1.8],
-    EG:[30.8,26.8],SV:[-88.9,13.8],ET:[40.5,9.1],FI:[26.3,64.0],FR:[2.2,46.2],
-    GA:[11.6,-0.8],DE:[10.5,51.2],GH:[-1.0,7.9],GR:[21.8,39.1],GT:[-90.2,15.8],
-    HT:[-73.0,18.9],HN:[-86.2,15.2],HU:[19.5,47.2],IN:[78.7,20.6],ID:[113.9,-0.8],
-    IR:[53.7,32.4],IQ:[43.7,33.2],IE:[-8.2,53.4],IL:[34.9,31.5],IT:[12.6,42.8],
-    JM:[-77.3,18.1],JP:[138.3,36.2],JO:[36.2,31.2],KE:[37.9,0.0],KP:[127.5,40.3],
-    KR:[127.8,35.9],KW:[47.5,29.3],LA:[102.5,17.9],LB:[35.9,33.9],LR:[-9.4,6.4],
-    LY:[17.2,26.3],LU:[6.1,49.8],MX:[-102.6,23.6],MA:[-7.1,31.8],MZ:[35.5,-18.7],
-    NA:[18.5,-22.3],NP:[84.1,28.4],NL:[5.3,52.1],NZ:[172.8,-41.5],NI:[-85.0,12.9],
-    NG:[8.7,9.1],NO:[8.5,60.5],PK:[69.3,30.4],PA:[-80.1,8.5],PG:[143.9,-6.3],
-    PE:[-75.0,-9.2],PH:[122.9,12.9],PL:[19.1,52.1],PT:[-8.2,39.6],QA:[51.2,25.4],
-    RO:[24.9,45.9],RU:[99.0,61.5],SA:[44.5,24.0],SN:[-14.5,14.5],SO:[46.2,5.2],
-    ZA:[25.1,-29.0],ES:[-3.7,40.2],SD:[29.9,12.9],SE:[18.6,60.1],CH:[8.2,46.8],
-    SY:[38.0,35.0],TH:[101.0,15.9],TR:[35.2,39.1],UG:[32.3,1.4],UA:[31.2,48.4],
-    AE:[53.8,23.4],GB:[-3.4,55.4],US:[-100.4,37.1],UY:[-55.8,-32.5],VE:[-66.6,6.4],
-    VN:[108.3,14.1],YE:[47.6,15.6],ZM:[27.8,-13.1],ZW:[29.9,-19.0],BA:[17.2,44.2],
-    RS:[21.0,44.0],BY:[28.0,53.5],GE:[43.4,42.3],KZ:[66.9,48.0],MN:[103.8,46.9]};
+  var CC_CENTROIDS = {
+    AF: [67.7, 33.9],
+    AL: [20.2, 41.2],
+    DZ: [2.6, 28.0],
+    AO: [17.9, -11.2],
+    AR: [-63.6, -38.4],
+    AU: [133.8, -25.3],
+    AT: [14.6, 47.7],
+    BD: [90.4, 23.7],
+    BE: [4.5, 50.5],
+    BO: [-64.7, -17.0],
+    BR: [-51.9, -14.2],
+    BG: [25.5, 42.7],
+    MM: [96.7, 16.9],
+    KH: [104.9, 12.6],
+    CM: [12.4, 5.7],
+    CA: [-96.8, 56.1],
+    LK: [80.8, 7.9],
+    CL: [-71.5, -35.7],
+    CN: [104.2, 35.9],
+    CO: [-74.3, 4.6],
+    CD: [23.7, -2.9],
+    CR: [-84.2, 9.7],
+    HR: [16.4, 45.1],
+    CU: [-79.5, 21.5],
+    CY: [33.4, 35.1],
+    CZ: [15.5, 49.8],
+    DK: [9.5, 56.3],
+    DO: [-70.2, 18.7],
+    EC: [-78.1, -1.8],
+    EG: [30.8, 26.8],
+    SV: [-88.9, 13.8],
+    ET: [40.5, 9.1],
+    FI: [26.3, 64.0],
+    FR: [2.2, 46.2],
+    GA: [11.6, -0.8],
+    DE: [10.5, 51.2],
+    GH: [-1.0, 7.9],
+    GR: [21.8, 39.1],
+    GT: [-90.2, 15.8],
+    HT: [-73.0, 18.9],
+    HN: [-86.2, 15.2],
+    HU: [19.5, 47.2],
+    IN: [78.7, 20.6],
+    ID: [113.9, -0.8],
+    IR: [53.7, 32.4],
+    IQ: [43.7, 33.2],
+    IE: [-8.2, 53.4],
+    IL: [34.9, 31.5],
+    IT: [12.6, 42.8],
+    JM: [-77.3, 18.1],
+    JP: [138.3, 36.2],
+    JO: [36.2, 31.2],
+    KE: [37.9, 0.0],
+    KP: [127.5, 40.3],
+    KR: [127.8, 35.9],
+    KW: [47.5, 29.3],
+    LA: [102.5, 17.9],
+    LB: [35.9, 33.9],
+    LR: [-9.4, 6.4],
+    LY: [17.2, 26.3],
+    LU: [6.1, 49.8],
+    MX: [-102.6, 23.6],
+    MA: [-7.1, 31.8],
+    MZ: [35.5, -18.7],
+    NA: [18.5, -22.3],
+    NP: [84.1, 28.4],
+    NL: [5.3, 52.1],
+    NZ: [172.8, -41.5],
+    NI: [-85.0, 12.9],
+    NG: [8.7, 9.1],
+    NO: [8.5, 60.5],
+    PK: [69.3, 30.4],
+    PA: [-80.1, 8.5],
+    PG: [143.9, -6.3],
+    PE: [-75.0, -9.2],
+    PH: [122.9, 12.9],
+    PL: [19.1, 52.1],
+    PT: [-8.2, 39.6],
+    QA: [51.2, 25.4],
+    RO: [24.9, 45.9],
+    RU: [99.0, 61.5],
+    SA: [44.5, 24.0],
+    SN: [-14.5, 14.5],
+    SO: [46.2, 5.2],
+    ZA: [25.1, -29.0],
+    ES: [-3.7, 40.2],
+    SD: [29.9, 12.9],
+    SE: [18.6, 60.1],
+    CH: [8.2, 46.8],
+    SY: [38.0, 35.0],
+    TH: [101.0, 15.9],
+    TR: [35.2, 39.1],
+    UG: [32.3, 1.4],
+    UA: [31.2, 48.4],
+    AE: [53.8, 23.4],
+    GB: [-3.4, 55.4],
+    US: [-100.4, 37.1],
+    UY: [-55.8, -32.5],
+    VE: [-66.6, 6.4],
+    VN: [108.3, 14.1],
+    YE: [47.6, 15.6],
+    ZM: [27.8, -13.1],
+    ZW: [29.9, -19.0],
+    BA: [17.2, 44.2],
+    RS: [21.0, 44.0],
+    BY: [28.0, 53.5],
+    GE: [43.4, 42.3],
+    KZ: [66.9, 48.0],
+    MN: [103.8, 46.9],
+  };
 
-  function iso2Flag(cc){
-    if(!cc||cc.length!==2)return'';
-    return cc.split('').map(function(c){
-      return String.fromCodePoint(0x1F1E6-65+c.toUpperCase().charCodeAt(0));
-    }).join('');
+  function iso2Flag(cc) {
+    if (!cc || cc.length !== 2) return "";
+    return cc
+      .split("")
+      .map(function (c) {
+        return String.fromCodePoint(
+          0x1f1e6 - 65 + c.toUpperCase().charCodeAt(0),
+        );
+      })
+      .join("");
   }
 
-  function project(lon,lat){
-    return [(lon+180)*(W/360), (90-lat)*(H/180)];
+  function project(lon, lat) {
+    return [(lon + 180) * (W / 360), (90 - lat) * (H / 180)];
   }
 
-  function computeCentroid(feature){
+  function computeCentroid(feature) {
     // Use CC_CENTROIDS if available, else rough bbox centre from geometry
     var cc = feature._cc;
-    if(CC_CENTROIDS[cc]) return project(CC_CENTROIDS[cc][0], CC_CENTROIDS[cc][1]);
+    if (CC_CENTROIDS[cc])
+      return project(CC_CENTROIDS[cc][0], CC_CENTROIDS[cc][1]);
     var coords = [];
-    function gather(ring){ ring.forEach(function(p){ coords.push(p); }); }
-    if(feature.geometry.type==='Polygon') feature.geometry.coordinates.forEach(gather);
-    else if(feature.geometry.type==='MultiPolygon')
-      feature.geometry.coordinates.forEach(function(poly){ poly.forEach(gather); });
-    if(!coords.length) return null;
-    var lon=0,lat=0;
-    coords.forEach(function(p){lon+=p[0];lat+=p[1];});
-    return project(lon/coords.length, lat/coords.length);
+    function gather(ring) {
+      ring.forEach(function (p) {
+        coords.push(p);
+      });
+    }
+    if (feature.geometry.type === "Polygon")
+      feature.geometry.coordinates.forEach(gather);
+    else if (feature.geometry.type === "MultiPolygon")
+      feature.geometry.coordinates.forEach(function (poly) {
+        poly.forEach(gather);
+      });
+    if (!coords.length) return null;
+    var lon = 0,
+      lat = 0;
+    coords.forEach(function (p) {
+      lon += p[0];
+      lat += p[1];
+    });
+    return project(lon / coords.length, lat / coords.length);
   }
 
-  function coordsToD(coords){
-    return coords.map(function(ring){
-      var d='';
-      for(var i=0;i<ring.length;i++){
-        var p=project(ring[i][0],ring[i][1]);
-        if(i===0){
-          d+='M'+p[0].toFixed(1)+','+p[1].toFixed(1);
-        } else {
-          // Detect antimeridian jump (>180 degrees lon diff) — move instead of line
-          var dlon=Math.abs(ring[i][0]-ring[i-1][0]);
-          if(dlon>180){
-            d+='M'+p[0].toFixed(1)+','+p[1].toFixed(1);
+  function coordsToD(coords) {
+    return coords
+      .map(function (ring) {
+        var d = "";
+        for (var i = 0; i < ring.length; i++) {
+          var p = project(ring[i][0], ring[i][1]);
+          if (i === 0) {
+            d += "M" + p[0].toFixed(1) + "," + p[1].toFixed(1);
           } else {
-            d+=' L'+p[0].toFixed(1)+','+p[1].toFixed(1);
+            // Detect antimeridian jump (>180 degrees lon diff) — move instead of line
+            var dlon = Math.abs(ring[i][0] - ring[i - 1][0]);
+            if (dlon > 180) {
+              d += "M" + p[0].toFixed(1) + "," + p[1].toFixed(1);
+            } else {
+              d += " L" + p[0].toFixed(1) + "," + p[1].toFixed(1);
+            }
           }
         }
-      }
-      return d+'Z';
-    }).join(' ');
+        return d + "Z";
+      })
+      .join(" ");
   }
 
-  function makeArcD(x1,y1,x2,y2){
-    var dx=x2-x1, dy=y2-y1;
-    var dist=Math.sqrt(dx*dx+dy*dy);
-    var cx=(x1+x2)/2, cy=(y1+y2)/2;
+  function makeArcD(x1, y1, x2, y2) {
+    var dx = x2 - x1,
+      dy = y2 - y1;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var cx = (x1 + x2) / 2,
+      cy = (y1 + y2) / 2;
     // Control point rises proportionally above midpoint
-    var rise = Math.max(40, dist*0.35);
-    var nx=-dy/dist, ny=dx/dist; // perpendicular unit
+    var rise = Math.max(40, dist * 0.35);
+    var nx = -dy / dist,
+      ny = dx / dist; // perpendicular unit
     // Always arch upward (negative y = up in SVG)
-    if(ny>0){nx=-nx;ny=-ny;}
-    var cpx=cx+nx*rise, cpy=cy+ny*rise;
-    return 'M'+x1.toFixed(1)+','+y1.toFixed(1)+
-           ' Q'+cpx.toFixed(1)+','+cpy.toFixed(1)+
-           ' '+x2.toFixed(1)+','+y2.toFixed(1);
+    if (ny > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    var cpx = cx + nx * rise,
+      cpy = cy + ny * rise;
+    return (
+      "M" +
+      x1.toFixed(1) +
+      "," +
+      y1.toFixed(1) +
+      " Q" +
+      cpx.toFixed(1) +
+      "," +
+      cpy.toFixed(1) +
+      " " +
+      x2.toFixed(1) +
+      "," +
+      y2.toFixed(1)
+    );
   }
 
-  function updateArcs(counts){
-    if(!_arcLayer) return;
+  function updateArcs(counts) {
+    if (!_arcLayer) return;
     var src = _centroids[_localCC];
     // Remove old arcs not in current counts
-    Object.keys(_arcEls).forEach(function(cc){
-      if(!counts[cc] && _arcEls[cc]){
-        _arcEls[cc].parentNode && _arcEls[cc].parentNode.removeChild(_arcEls[cc]);
+    Object.keys(_arcEls).forEach(function (cc) {
+      if (!counts[cc] && _arcEls[cc]) {
+        _arcEls[cc].parentNode &&
+          _arcEls[cc].parentNode.removeChild(_arcEls[cc]);
         delete _arcEls[cc];
       }
     });
-    if(!src) return;
-    var max=0; Object.keys(counts).forEach(function(k){if(counts[k]>max)max=counts[k];});
-    Object.keys(counts).forEach(function(cc){
-      if(cc===_localCC) return;
-      var dst = _centroids[cc]; if(!dst) return;
-      var hot = counts[cc]>=max*0.5;
-      var arcD = makeArcD(src[0],src[1],dst[0],dst[1]);
+    if (!src) return;
+    var max = 0;
+    Object.keys(counts).forEach(function (k) {
+      if (counts[k] > max) max = counts[k];
+    });
+    Object.keys(counts).forEach(function (cc) {
+      if (cc === _localCC) return;
+      var dst = _centroids[cc];
+      if (!dst) return;
+      var hot = counts[cc] >= max * 0.5;
+      var arcD = makeArcD(src[0], src[1], dst[0], dst[1]);
       // Only recreate if path changed or doesn't exist
       var existing = _arcEls[cc];
-      var arcPath = existing ? existing.querySelector('path') : null;
-      if(!existing || (arcPath && arcPath.getAttribute('d')!==arcD)){
-        if(existing) existing.parentNode && existing.parentNode.removeChild(existing);
+      var arcPath = existing ? existing.querySelector("path") : null;
+      if (!existing || (arcPath && arcPath.getAttribute("d") !== arcD)) {
+        if (existing)
+          existing.parentNode && existing.parentNode.removeChild(existing);
         // Group: arc path + animated comet dot
-        var g = document.createElementNS('http://www.w3.org/2000/svg','g');
-        var path = document.createElementNS('http://www.w3.org/2000/svg','path');
-        path.setAttribute('d', arcD);
-        path.setAttribute('class','map-arc'+(hot?' hot':''));
+        var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        var path = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "path",
+        );
+        path.setAttribute("d", arcD);
+        path.setAttribute("class", "map-arc" + (hot ? " hot" : ""));
         // Comet dot with animateMotion — randomised start offset so dots
         // don't all depart simultaneously
-        var dur = hot ? '1.4s' : '2.2s';
+        var dur = hot ? "1.4s" : "2.2s";
         var durSecs = hot ? 1.4 : 2.2;
         // Vary duration slightly per country so loops desync over time
-        var jitter = (Math.random() * 0.6 - 0.3);
-        var finalDur = Math.max(0.8, durSecs + jitter).toFixed(2)+'s';
-        var beginDelay = -(Math.random() * durSecs).toFixed(2)+'s';
-        var circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
-        circle.setAttribute('r', hot ? '3' : '2');
-        circle.setAttribute('class','map-comet'+(hot?' hot':''));
-        var anim = document.createElementNS('http://www.w3.org/2000/svg','animateMotion');
-        anim.setAttribute('dur', finalDur);
-        anim.setAttribute('repeatCount','indefinite');
-        anim.setAttribute('begin', beginDelay);
-        anim.setAttribute('path', arcD);
+        var jitter = Math.random() * 0.6 - 0.3;
+        var finalDur = Math.max(0.8, durSecs + jitter).toFixed(2) + "s";
+        var beginDelay = -(Math.random() * durSecs).toFixed(2) + "s";
+        var circle = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "circle",
+        );
+        circle.setAttribute("r", hot ? "3" : "2");
+        circle.setAttribute("class", "map-comet" + (hot ? " hot" : ""));
+        var anim = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "animateMotion",
+        );
+        anim.setAttribute("dur", finalDur);
+        anim.setAttribute("repeatCount", "indefinite");
+        anim.setAttribute("begin", beginDelay);
+        anim.setAttribute("path", arcD);
         circle.appendChild(anim);
         g.appendChild(path);
         g.appendChild(circle);
@@ -1950,54 +3715,85 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
     });
   }
 
-  function updateLabels(counts){
-    if(!_labelLayer) return;
-    var max=0; Object.keys(counts).forEach(function(k){if(counts[k]>max)max=counts[k];});
-    // Remove stale labels
-    Object.keys(_labelEls).forEach(function(cc){
-      if(!counts[cc]){ _labelEls[cc].textContent=''; }
+  function updateLabels(counts) {
+    if (!_labelLayer) return;
+    var max = 0;
+    Object.keys(counts).forEach(function (k) {
+      if (counts[k] > max) max = counts[k];
     });
-    Object.keys(counts).forEach(function(cc){
-      var c=_centroids[cc]; if(!c) return;
-      var el=_labelEls[cc];
-      if(!el){
-        el=document.createElementNS('http://www.w3.org/2000/svg','text');
-        el.setAttribute('class','map-label');
-        _labelLayer.appendChild(el);
-        _labelEls[cc]=el;
+    // Remove stale labels
+    Object.keys(_labelEls).forEach(function (cc) {
+      if (!counts[cc]) {
+        _labelEls[cc].textContent = "";
       }
-      el.setAttribute('x',c[0].toFixed(1));
-      el.setAttribute('y',(c[1]-6).toFixed(1));
-      el.textContent=counts[cc];
+    });
+    Object.keys(counts).forEach(function (cc) {
+      var c = _centroids[cc];
+      if (!c) return;
+      var el = _labelEls[cc];
+      if (!el) {
+        el = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        el.setAttribute("class", "map-label");
+        _labelLayer.appendChild(el);
+        _labelEls[cc] = el;
+      }
+      el.setAttribute("x", c[0].toFixed(1));
+      el.setAttribute("y", (c[1] - 6).toFixed(1));
+      el.textContent = counts[cc];
     });
   }
 
-  function updateHighlights(counts){
-    var max=0; Object.keys(counts).forEach(function(k){if(counts[k]>max)max=counts[k];});
-    Object.keys(_pathEls).forEach(function(cc){
-      var el=_pathEls[cc], n=counts[cc]||0;
-      el.classList.remove('active','hot');
-      if(n>0){ el.classList.add(n>=max*0.5?'hot':'active'); }
+  function updateHighlights(counts) {
+    var max = 0;
+    Object.keys(counts).forEach(function (k) {
+      if (counts[k] > max) max = counts[k];
+    });
+    Object.keys(_pathEls).forEach(function (cc) {
+      var el = _pathEls[cc],
+        n = counts[cc] || 0;
+      el.classList.remove("active", "hot");
+      if (n > 0) {
+        el.classList.add(n >= max * 0.5 ? "hot" : "active");
+      }
     });
   }
 
   // Sparklines: tiny 40x14 canvas per country, last 20 data points
-  var SPARK_LEN=20;
-  function pushSpark(cc, val){
-    if(!_sparkData[cc]) _sparkData[cc]=[];
+  var SPARK_LEN = 20;
+  function pushSpark(cc, val) {
+    if (!_sparkData[cc]) _sparkData[cc] = [];
     _sparkData[cc].push(val);
-    if(_sparkData[cc].length>SPARK_LEN) _sparkData[cc].shift();
+    if (_sparkData[cc].length > SPARK_LEN) _sparkData[cc].shift();
   }
-  function drawSparkSVG(data){
-    if(!data||data.length<2) return '';
-    var max=Math.max.apply(null,data)||1;
-    var w=50,h=12;
-    var pts=data.map(function(v,i){
-      return (i*(w/(data.length-1))).toFixed(1)+','+(h-(v/max*(h-2))-1).toFixed(1);
-    }).join(' ');
-    return '<svg class="conn-sparkline" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+
-      '<polyline points="'+pts+'" fill="none" stroke="rgba(56,189,248,.6)" stroke-width="1.2" stroke-linejoin="round"/>'+
-      '</svg>';
+  function drawSparkSVG(data) {
+    if (!data || data.length < 2) return "";
+    var max = Math.max.apply(null, data) || 1;
+    var w = 50,
+      h = 12;
+    var pts = data
+      .map(function (v, i) {
+        return (
+          (i * (w / (data.length - 1))).toFixed(1) +
+          "," +
+          (h - (v / max) * (h - 2) - 1).toFixed(1)
+        );
+      })
+      .join(" ");
+    return (
+      '<svg class="conn-sparkline" width="' +
+      w +
+      '" height="' +
+      h +
+      '" viewBox="0 0 ' +
+      w +
+      " " +
+      h +
+      '">' +
+      '<polyline points="' +
+      pts +
+      '" fill="none" stroke="rgba(56,189,248,.6)" stroke-width="1.2" stroke-linejoin="round"/>' +
+      "</svg>"
+    );
   }
 
   // ── Country filter ────────────────────────────────────────────────────────
@@ -2011,22 +3807,28 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
       // No filter — clear the flag and re-render with full unfiltered data
       renderPortList(_lastConnPayload.topPorts || []);
       var unfiltDsts = (_lastConnPayload.topDestinations || []).slice(0, 10);
-      if (window._connSankeyClearFilter) window._connSankeyClearFilter(srcs, unfiltDsts);
-      var sub = $('connMapSub');
-      if (sub) sub.textContent = ((_lastConnPayload.topCountries || []).length) + ' countries active';
+      if (window._connSankeyClearFilter)
+        window._connSankeyClearFilter(srcs, unfiltDsts);
+      var sub = $("connMapSub");
+      if (sub)
+        sub.textContent =
+          (_lastConnPayload.topCountries || []).length + " countries active";
       return;
     }
 
     // Use the server-built per-country destination index — covers all destinations
     // for this country, not just those that made the global topN list.
-    var filteredDsts = (_lastConnPayload.countryDests && _lastConnPayload.countryDests[cc])
-      ? _lastConnPayload.countryDests[cc]
-      : (_lastConnPayload.topDestinations || []).filter(function(d) { return d.country === cc; });
+    var filteredDsts =
+      _lastConnPayload.countryDests && _lastConnPayload.countryDests[cc]
+        ? _lastConnPayload.countryDests[cc]
+        : (_lastConnPayload.topDestinations || []).filter(function (d) {
+            return d.country === cc;
+          });
 
     // Derive port counts from filtered destination keys (format: ip:port/proto or ip:port)
     var portCounts = {};
-    filteredDsts.forEach(function(d) {
-      var key = d.key || '';
+    filteredDsts.forEach(function (d) {
+      var key = d.key || "";
       var m = key.match(/:(\d+)(?:\/|$)/);
       if (m) {
         var p = m[1];
@@ -2034,88 +3836,155 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
       }
     });
     var filteredPorts = Object.keys(portCounts)
-      .map(function(p) { return { port: p, count: portCounts[p] }; })
-      .sort(function(a, b) { return b.count - a.count; })
+      .map(function (p) {
+        return { port: p, count: portCounts[p] };
+      })
+      .sort(function (a, b) {
+        return b.count - a.count;
+      })
       .slice(0, 10);
 
     renderPortList(filteredPorts);
-    if (window._connSankeyRender) window._connSankeyRender(srcs, filteredDsts.slice(0, 10));
+    if (window._connSankeyRender)
+      window._connSankeyRender(srcs, filteredDsts.slice(0, 10));
 
     // Update subtitle to show filter is active
     var cc_name = CC_NAMES[cc] || cc;
     var flag = iso2Flag(cc);
-    var sub = $('connMapSub');
-    if (sub) sub.textContent = flag + ' ' + cc_name + ' — ' + filteredDsts.length + ' destination' + (filteredDsts.length !== 1 ? 's' : '');
+    var sub = $("connMapSub");
+    if (sub)
+      sub.textContent =
+        flag +
+        " " +
+        cc_name +
+        " — " +
+        filteredDsts.length +
+        " destination" +
+        (filteredDsts.length !== 1 ? "s" : "");
   }
 
-  function renderPortList(topPorts){
-    var el=$('connPortList'); if(!el) return;
-    if(!topPorts||!topPorts.length){el.innerHTML='<div class="empty-state">—</div>';return;}
-    var max=topPorts[0].count||1;
-    el.innerHTML=topPorts.map(function(p){
-      var pct=Math.round((p.count/max)*100);
-      var name=PORT_NAMES[p.port]||'';
-      return '<div class="conn-port-row">'+
-        '<span class="conn-port-num">'+p.port+'</span>'+
-        '<span class="conn-port-name">'+name+'</span>'+
-        '<div class="conn-port-bar" style="width:'+Math.max(4,pct)+'px"></div>'+
-        '<span class="conn-port-count">'+p.count+'</span>'+
-      '</div>';
-    }).join('');
-  }
-
-  function renderCountryList(topCountries, selectedCC){
-    var list=$('connMapList'); if(!list) return;
-    var sub=$('connMapSub');
-    if(!topCountries||!topCountries.length){
-      list.innerHTML='<div class="empty-state">No geo data yet</div>'; return;
+  function renderPortList(topPorts) {
+    var el = $("connPortList");
+    if (!el) return;
+    if (!topPorts || !topPorts.length) {
+      el.innerHTML = '<div class="empty-state">—</div>';
+      return;
     }
-    if(sub) sub.textContent=topCountries.length+' countries active';
-    list.innerHTML=topCountries.map(function(e){
-      var flag=iso2Flag(e.cc);
-      var total=(e.proto.tcp||0)+(e.proto.udp||0)+(e.proto.other||0)||1;
-      var tcpPct=Math.round((e.proto.tcp||0)/total*100);
-      var udpPct=Math.round((e.proto.udp||0)/total*100);
-      var othPct=100-tcpPct-udpPct;
-      var spark=drawSparkSVG(_sparkData[e.cc]);
-      var sel=(e.cc===selectedCC);
-      return '<div class="conn-map-row'+(sel?' selected':'')+'" data-cc="'+e.cc+'">'+
-        '<span class="conn-map-flag">'+flag+'</span>'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="display:flex;align-items:center;justify-content:space-between;gap:.4rem">'+
-            '<div class="conn-map-label" style="min-width:0">'+(CC_NAMES[e.cc]||e.cc)+(e.city?' <span class="conn-map-label-sub">'+esc(e.city)+'</span>':'')+'</div>'+
-            (spark?'<div style="flex-shrink:0">'+spark+'</div>':'')+
-          '</div>'+
-          (e.orgs&&e.orgs.length?'<div class="svc-sub-rows">'+e.orgs.map(function(o){
-            return'<span class="svc-sub-row">'+svcBadge(o.org,o.cat)+'<span class="svc-sub-count">'+o.count+'</span></span>';
-          }).join('')+'</div>':'')+
-          '<div class="conn-proto-bar">'+
-            '<div class="conn-proto-tcp" style="flex:'+tcpPct+'"></div>'+
-            '<div class="conn-proto-udp" style="flex:'+udpPct+'"></div>'+
-            '<div class="conn-proto-other" style="flex:'+othPct+'"></div>'+
-          '</div>'+
-        '</div>'+
-        '<span class="conn-map-count">'+e.count+'</span>'+
-      '</div>';
-    }).join('');
+    var max = topPorts[0].count || 1;
+    el.innerHTML = topPorts
+      .map(function (p) {
+        var pct = Math.round((p.count / max) * 100);
+        var name = PORT_NAMES[p.port] || "";
+        return (
+          '<div class="conn-port-row">' +
+          '<span class="conn-port-num">' +
+          p.port +
+          "</span>" +
+          '<span class="conn-port-name">' +
+          name +
+          "</span>" +
+          '<div class="conn-port-bar" style="width:' +
+          Math.max(4, pct) +
+          'px"></div>' +
+          '<span class="conn-port-count">' +
+          p.count +
+          "</span>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  function renderCountryList(topCountries, selectedCC) {
+    var list = $("connMapList");
+    if (!list) return;
+    var sub = $("connMapSub");
+    if (!topCountries || !topCountries.length) {
+      list.innerHTML = '<div class="empty-state">No geo data yet</div>';
+      return;
+    }
+    if (sub) sub.textContent = topCountries.length + " countries active";
+    list.innerHTML = topCountries
+      .map(function (e) {
+        var flag = iso2Flag(e.cc);
+        var total =
+          (e.proto.tcp || 0) + (e.proto.udp || 0) + (e.proto.other || 0) || 1;
+        var tcpPct = Math.round(((e.proto.tcp || 0) / total) * 100);
+        var udpPct = Math.round(((e.proto.udp || 0) / total) * 100);
+        var othPct = 100 - tcpPct - udpPct;
+        var spark = drawSparkSVG(_sparkData[e.cc]);
+        var sel = e.cc === selectedCC;
+        return (
+          '<div class="conn-map-row' +
+          (sel ? " selected" : "") +
+          '" data-cc="' +
+          e.cc +
+          '">' +
+          '<span class="conn-map-flag">' +
+          flag +
+          "</span>" +
+          '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:.4rem">' +
+          '<div class="conn-map-label" style="min-width:0">' +
+          (CC_NAMES[e.cc] || e.cc) +
+          (e.city
+            ? ' <span class="conn-map-label-sub">' + esc(e.city) + "</span>"
+            : "") +
+          "</div>" +
+          (spark ? '<div style="flex-shrink:0">' + spark + "</div>" : "") +
+          "</div>" +
+          (e.orgs && e.orgs.length
+            ? '<div class="svc-sub-rows">' +
+              e.orgs
+                .map(function (o) {
+                  return (
+                    '<span class="svc-sub-row">' +
+                    svcBadge(o.org, o.cat) +
+                    '<span class="svc-sub-count">' +
+                    o.count +
+                    "</span></span>"
+                  );
+                })
+                .join("") +
+              "</div>"
+            : "") +
+          '<div class="conn-proto-bar">' +
+          '<div class="conn-proto-tcp" style="flex:' +
+          tcpPct +
+          '"></div>' +
+          '<div class="conn-proto-udp" style="flex:' +
+          udpPct +
+          '"></div>' +
+          '<div class="conn-proto-other" style="flex:' +
+          othPct +
+          '"></div>' +
+          "</div>" +
+          "</div>" +
+          '<span class="conn-map-count">' +
+          e.count +
+          "</span>" +
+          "</div>"
+        );
+      })
+      .join("");
 
     // Re-bind click handlers for filter
-    list.querySelectorAll('.conn-map-row').forEach(function(row){
-      row.addEventListener('click',function(){
-        var cc=row.dataset.cc;
-        _selectedCC=(cc===_selectedCC)?null:cc;
-        var lbl=$('connFilterLabel');
-        if(lbl) lbl.style.display=_selectedCC?'':'none';
+    list.querySelectorAll(".conn-map-row").forEach(function (row) {
+      row.addEventListener("click", function () {
+        var cc = row.dataset.cc;
+        _selectedCC = cc === _selectedCC ? null : cc;
+        var lbl = $("connFilterLabel");
+        if (lbl) lbl.style.display = _selectedCC ? "" : "none";
         renderCountryList(topCountries, _selectedCC);
         // Map: highlight only selected country, dim others
-        if(_selectedCC){
-          Object.keys(_pathEls).forEach(function(c){
-            _pathEls[c].classList.remove('active','hot');
-            if(c===_selectedCC) _pathEls[c].classList.add('hot');
+        if (_selectedCC) {
+          Object.keys(_pathEls).forEach(function (c) {
+            _pathEls[c].classList.remove("active", "hot");
+            if (c === _selectedCC) _pathEls[c].classList.add("hot");
           });
           // Show arcs only to selected country
-          var filteredCounts={};
-          filteredCounts[_selectedCC]=_countryCounts[_selectedCC]||0;
+          var filteredCounts = {};
+          filteredCounts[_selectedCC] = _countryCounts[_selectedCC] || 0;
           updateArcs(filteredCounts);
         } else {
           updateHighlights(_countryCounts);
@@ -2128,285 +3997,405 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   }
 
   // Tooltip on country hover
-  function bindTooltip(){
-    var _tipCc=null, _mapWrapRect=null;
+  function bindTooltip() {
+    var _tipCc = null,
+      _mapWrapRect = null;
     // Cache the wrapper rect; invalidate on resize so we don't call
     // getBoundingClientRect() (a forced layout) on every mousemove tick
-    window.addEventListener('resize',function(){ _mapWrapRect=null; });
-    mapEl.addEventListener('mousemove',function(e){
-      var tgt=e.target; if(!tgt.dataset||!tgt.dataset.cc){
-        if(_tipCc){tooltipEl.style.display='none';_tipCc=null;} return;
-      }
-      var cc=tgt.dataset.cc;
-      var n=_countryCounts[cc]||0;
-      if(!n&&!_pathEls[cc]) return;
-      if(cc!==_tipCc){
-        _tipCc=cc;
-        _mapWrapRect=null; // invalidate when tooltip content changes
-        var flag=iso2Flag(cc);
-        var city=_countryCity[cc]||'';
-        var proto=_countryProto[cc]||{};
-        tooltipEl.innerHTML=flag+' <strong>'+(CC_NAMES[cc]||cc)+'</strong>'+(city?' · '+esc(city):'')+
-          (n?' &nbsp;<span style="color:var(--accent-rx)">'+n+' conns</span>':'')+
-          (proto.tcp||proto.udp?'<br><span style="color:var(--text-muted);font-size:.6rem">TCP:'+
-            (proto.tcp||0)+' UDP:'+(proto.udp||0)+'</span>':'');
-        tooltipEl.style.display='block';
-      }
-      if(!_mapWrapRect) _mapWrapRect=mapEl.parentElement.getBoundingClientRect();
-      tooltipEl.style.left=(e.clientX-_mapWrapRect.left+10)+'px';
-      tooltipEl.style.top=(e.clientY-_mapWrapRect.top-30)+'px';
+    window.addEventListener("resize", function () {
+      _mapWrapRect = null;
     });
-    mapEl.addEventListener('mouseleave',function(){
-      tooltipEl.style.display='none'; _tipCc=null; _mapWrapRect=null;
+    mapEl.addEventListener("mousemove", function (e) {
+      var tgt = e.target;
+      if (!tgt.dataset || !tgt.dataset.cc) {
+        if (_tipCc) {
+          tooltipEl.style.display = "none";
+          _tipCc = null;
+        }
+        return;
+      }
+      var cc = tgt.dataset.cc;
+      var n = _countryCounts[cc] || 0;
+      if (!n && !_pathEls[cc]) return;
+      if (cc !== _tipCc) {
+        _tipCc = cc;
+        _mapWrapRect = null; // invalidate when tooltip content changes
+        var flag = iso2Flag(cc);
+        var city = _countryCity[cc] || "";
+        var proto = _countryProto[cc] || {};
+        tooltipEl.innerHTML =
+          flag +
+          " <strong>" +
+          (CC_NAMES[cc] || cc) +
+          "</strong>" +
+          (city ? " · " + esc(city) : "") +
+          (n
+            ? ' &nbsp;<span style="color:var(--accent-rx)">' +
+              n +
+              " conns</span>"
+            : "") +
+          (proto.tcp || proto.udp
+            ? '<br><span style="color:var(--text-muted);font-size:.6rem">TCP:' +
+              (proto.tcp || 0) +
+              " UDP:" +
+              (proto.udp || 0) +
+              "</span>"
+            : "");
+        tooltipEl.style.display = "block";
+      }
+      if (!_mapWrapRect)
+        _mapWrapRect = mapEl.parentElement.getBoundingClientRect();
+      tooltipEl.style.left = e.clientX - _mapWrapRect.left + 10 + "px";
+      tooltipEl.style.top = e.clientY - _mapWrapRect.top - 30 + "px";
+    });
+    mapEl.addEventListener("mouseleave", function () {
+      tooltipEl.style.display = "none";
+      _tipCc = null;
+      _mapWrapRect = null;
     });
   }
 
   // Load map
-  fetch(MAP_URL).then(function(r){return r.json();}).then(function(world){
-    var s=document.createElement('script');
-    s.src='/vendor/topojson-client.min.js';
-    s.onload=function(){
-      var countries=topojson.feature(world,world.objects.countries);
+  fetch(MAP_URL)
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (world) {
+      var s = document.createElement("script");
+      s.src = "/vendor/topojson-client.min.js";
+      s.onload = function () {
+        var countries = topojson.feature(world, world.objects.countries);
 
-      // SVG layers: countries, arcs on top, labels on top of arcs
-      var countryLayer=document.createElementNS('http://www.w3.org/2000/svg','g');
-      _arcLayer=document.createElementNS('http://www.w3.org/2000/svg','g');
-      _labelLayer=document.createElementNS('http://www.w3.org/2000/svg','g');
-      mapEl.appendChild(countryLayer);
-      mapEl.appendChild(_arcLayer);
-      mapEl.appendChild(_labelLayer);
+        // SVG layers: countries, arcs on top, labels on top of arcs
+        var countryLayer = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "g",
+        );
+        _arcLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        _labelLayer = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "g",
+        );
+        mapEl.appendChild(countryLayer);
+        mapEl.appendChild(_arcLayer);
+        mapEl.appendChild(_labelLayer);
 
-      var frag=document.createDocumentFragment();
-      countries.features.forEach(function(f){
-        var numId=parseInt(f.id,10);
-        var cc=NUM_TO_ISO2[numId]||('N'+f.id);
-        f._cc=cc;
-        var d='';
-        if(f.geometry.type==='Polygon') d=coordsToD(f.geometry.coordinates);
-        else if(f.geometry.type==='MultiPolygon')
-          f.geometry.coordinates.forEach(function(p){d+=coordsToD(p);});
-        if(!d) return;
-        var path=document.createElementNS('http://www.w3.org/2000/svg','path');
-        path.setAttribute('d',d);
-        path.setAttribute('class','map-country');
-        path.setAttribute('data-cc',cc);
-        _pathEls[cc]=path;
-        var c=computeCentroid(f);
-        if(c) _centroids[cc]=c;
-        frag.appendChild(path);
-      });
-      countryLayer.appendChild(frag);
-      bindTooltip();
+        var frag = document.createDocumentFragment();
+        countries.features.forEach(function (f) {
+          var numId = parseInt(f.id, 10);
+          var cc = NUM_TO_ISO2[numId] || "N" + f.id;
+          f._cc = cc;
+          var d = "";
+          if (f.geometry.type === "Polygon")
+            d = coordsToD(f.geometry.coordinates);
+          else if (f.geometry.type === "MultiPolygon")
+            f.geometry.coordinates.forEach(function (p) {
+              d += coordsToD(p);
+            });
+          if (!d) return;
+          var path = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "path",
+          );
+          path.setAttribute("d", d);
+          path.setAttribute("class", "map-country");
+          path.setAttribute("data-cc", cc);
+          _pathEls[cc] = path;
+          var c = computeCentroid(f);
+          if (c) _centroids[cc] = c;
+          frag.appendChild(path);
+        });
+        countryLayer.appendChild(frag);
+        bindTooltip();
 
-  // ── Map zoom / pan ────────────────────────────────────────────────────────
-  (function(){
-    var wrap = $('worldMapWrap');
-    var svg  = mapEl;
-    if(!wrap||!svg) return;
+        // ── Map zoom / pan ────────────────────────────────────────────────────────
+        (function () {
+          var wrap = $("worldMapWrap");
+          var svg = mapEl;
+          if (!wrap || !svg) return;
 
-    var scale=1, tx=0, ty=0;
-    var MIN_SCALE=1, MAX_SCALE=8;
-    var dragging=false, dragStartX=0, dragStartY=0, dragTx=0, dragTy=0;
+          var scale = 1,
+            tx = 0,
+            ty = 0;
+          var MIN_SCALE = 1,
+            MAX_SCALE = 8;
+          var dragging = false,
+            dragStartX = 0,
+            dragStartY = 0,
+            dragTx = 0,
+            dragTy = 0;
 
-    function clampTranslate(s,x,y){
-      // Allow panning only within bounds at current scale
-      var svgW=svg.clientWidth||1000, svgH=svg.clientHeight||500;
-      var maxX=(s-1)*svgW, maxY=(s-1)*svgH;
-      return [Math.max(-maxX,Math.min(0,x)), Math.max(-maxY,Math.min(0,y))];
-    }
+          function clampTranslate(s, x, y) {
+            // Allow panning only within bounds at current scale
+            var svgW = svg.clientWidth || 1000,
+              svgH = svg.clientHeight || 500;
+            var maxX = (s - 1) * svgW,
+              maxY = (s - 1) * svgH;
+            return [
+              Math.max(-maxX, Math.min(0, x)),
+              Math.max(-maxY, Math.min(0, y)),
+            ];
+          }
 
-    function applyTransform(){
-      var cl=clampTranslate(scale,tx,ty); tx=cl[0]; ty=cl[1];
-      svg.style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')';
-      svg.style.transformOrigin='0 0';
-      wrap.style.cursor=scale>1?'grab':'default';
-    }
+          function applyTransform() {
+            var cl = clampTranslate(scale, tx, ty);
+            tx = cl[0];
+            ty = cl[1];
+            svg.style.transform =
+              "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
+            svg.style.transformOrigin = "0 0";
+            wrap.style.cursor = scale > 1 ? "grab" : "default";
+          }
 
-    function zoomAt(factor, cx, cy){
-      var newScale=Math.max(MIN_SCALE,Math.min(MAX_SCALE,scale*factor));
-      if(newScale===scale) return;
-      // Zoom toward cursor point
-      tx = cx - (cx-tx)*(newScale/scale);
-      ty = cy - (cy-ty)*(newScale/scale);
-      scale=newScale;
-      applyTransform();
-    }
+          function zoomAt(factor, cx, cy) {
+            var newScale = Math.max(
+              MIN_SCALE,
+              Math.min(MAX_SCALE, scale * factor),
+            );
+            if (newScale === scale) return;
+            // Zoom toward cursor point
+            tx = cx - (cx - tx) * (newScale / scale);
+            ty = cy - (cy - ty) * (newScale / scale);
+            scale = newScale;
+            applyTransform();
+          }
 
-    // Mouse wheel zoom
-    wrap.addEventListener('wheel',function(e){
-      e.preventDefault();
-      var rect=wrap.getBoundingClientRect();
-      var cx=e.clientX-rect.left, cy=e.clientY-rect.top;
-      var factor=e.deltaY<0?1.15:1/1.15;
-      zoomAt(factor,cx,cy);
-    },{passive:false});
+          // Mouse wheel zoom
+          wrap.addEventListener(
+            "wheel",
+            function (e) {
+              e.preventDefault();
+              var rect = wrap.getBoundingClientRect();
+              var cx = e.clientX - rect.left,
+                cy = e.clientY - rect.top;
+              var factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+              zoomAt(factor, cx, cy);
+            },
+            { passive: false },
+          );
 
-    // Drag pan
-    wrap.addEventListener('mousedown',function(e){
-      // Ignore clicks on the button controls — don't swallow their events
-      if(e.target.tagName==='BUTTON'||e.target.closest('button')) return;
-      if(scale<=1) return;
-      dragging=true; dragStartX=e.clientX; dragStartY=e.clientY;
-      dragTx=tx; dragTy=ty;
-      wrap.style.cursor='grabbing';
-      e.preventDefault();
-    });
-    window.addEventListener('mousemove',function(e){
-      if(!dragging) return;
-      tx=dragTx+(e.clientX-dragStartX);
-      ty=dragTy+(e.clientY-dragStartY);
-      applyTransform();
-    });
-    window.addEventListener('mouseup',function(){
-      dragging=false;
-      wrap.style.cursor=scale>1?'grab':'default';
-    });
+          // Drag pan
+          wrap.addEventListener("mousedown", function (e) {
+            // Ignore clicks on the button controls — don't swallow their events
+            if (e.target.tagName === "BUTTON" || e.target.closest("button"))
+              return;
+            if (scale <= 1) return;
+            dragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            dragTx = tx;
+            dragTy = ty;
+            wrap.style.cursor = "grabbing";
+            e.preventDefault();
+          });
+          window.addEventListener("mousemove", function (e) {
+            if (!dragging) return;
+            tx = dragTx + (e.clientX - dragStartX);
+            ty = dragTy + (e.clientY - dragStartY);
+            applyTransform();
+          });
+          window.addEventListener("mouseup", function () {
+            dragging = false;
+            wrap.style.cursor = scale > 1 ? "grab" : "default";
+          });
 
-    // Touch pinch zoom + drag — binds to whichever container currently holds the SVG
-    var touches={}, lastDist=null;
-    var _touchTarget=wrap;  // updated to fsOverlay when fullscreen is active
+          // Touch pinch zoom + drag — binds to whichever container currently holds the SVG
+          var touches = {},
+            lastDist = null;
+          var _touchTarget = wrap; // updated to fsOverlay when fullscreen is active
 
-    function onTouchStart(e){
-      // Don't swallow taps on the map control buttons
-      if(e.target.tagName==='BUTTON'||e.target.closest('button')) return;
-      Array.from(e.changedTouches).forEach(function(t){ touches[t.identifier]=t; });
-      if(Object.keys(touches).length===1){
-        var t=Object.values(touches)[0];
-        dragging=true; dragStartX=t.clientX; dragStartY=t.clientY;
-        dragTx=tx; dragTy=ty;
-      }
-      e.preventDefault();
-    }
-    function onTouchMove(e){
-      Array.from(e.changedTouches).forEach(function(t){ touches[t.identifier]=t; });
-      var pts=Object.values(touches);
-      if(pts.length===2){
-        var dx=pts[0].clientX-pts[1].clientX, dy=pts[0].clientY-pts[1].clientY;
-        var dist=Math.sqrt(dx*dx+dy*dy);
-        if(lastDist!==null){
-          var rect=_touchTarget.getBoundingClientRect();
-          var cx=(pts[0].clientX+pts[1].clientX)/2-rect.left;
-          var cy=(pts[0].clientY+pts[1].clientY)/2-rect.top;
-          zoomAt(dist/lastDist,cx,cy);
+          function onTouchStart(e) {
+            // Don't swallow taps on the map control buttons
+            if (e.target.tagName === "BUTTON" || e.target.closest("button"))
+              return;
+            Array.from(e.changedTouches).forEach(function (t) {
+              touches[t.identifier] = t;
+            });
+            if (Object.keys(touches).length === 1) {
+              var t = Object.values(touches)[0];
+              dragging = true;
+              dragStartX = t.clientX;
+              dragStartY = t.clientY;
+              dragTx = tx;
+              dragTy = ty;
+            }
+            e.preventDefault();
+          }
+          function onTouchMove(e) {
+            Array.from(e.changedTouches).forEach(function (t) {
+              touches[t.identifier] = t;
+            });
+            var pts = Object.values(touches);
+            if (pts.length === 2) {
+              var dx = pts[0].clientX - pts[1].clientX,
+                dy = pts[0].clientY - pts[1].clientY;
+              var dist = Math.sqrt(dx * dx + dy * dy);
+              if (lastDist !== null) {
+                var rect = _touchTarget.getBoundingClientRect();
+                var cx = (pts[0].clientX + pts[1].clientX) / 2 - rect.left;
+                var cy = (pts[0].clientY + pts[1].clientY) / 2 - rect.top;
+                zoomAt(dist / lastDist, cx, cy);
+              }
+              lastDist = dist;
+            } else if (pts.length === 1 && dragging) {
+              var t2 = pts[0];
+              tx = dragTx + (t2.clientX - dragStartX);
+              ty = dragTy + (t2.clientY - dragStartY);
+              applyTransform();
+            }
+            e.preventDefault();
+          }
+          function onTouchEnd(e) {
+            Array.from(e.changedTouches).forEach(function (t) {
+              delete touches[t.identifier];
+            });
+            lastDist = null;
+            if (!Object.keys(touches).length) dragging = false;
+          }
+          function bindTouch(el) {
+            el.addEventListener("touchstart", onTouchStart, { passive: false });
+            el.addEventListener("touchmove", onTouchMove, { passive: false });
+            el.addEventListener("touchend", onTouchEnd);
+          }
+          function unbindTouch(el) {
+            el.removeEventListener("touchstart", onTouchStart);
+            el.removeEventListener("touchmove", onTouchMove);
+            el.removeEventListener("touchend", onTouchEnd);
+          }
+          bindTouch(wrap);
+
+          // Fullscreen — portal the SVG into a body-level overlay to escape stacking contexts
+          var fsBtn = $("mapFullscreenBtn");
+          var fsOverlay = $("mapFsOverlay");
+          var fsClose = $("mapFsClose");
+          // svgPlaceholder marks where the SVG lives when not in fullscreen
+          var svgPlaceholder = document.createComment("map-svg-placeholder");
+
+          function isMobile() {
+            return window.innerWidth <= 767;
+          }
+
+          function openMapFs() {
+            if (!fsOverlay || !svg) return;
+            unbindTouch(wrap);
+            svg.parentNode.insertBefore(svgPlaceholder, svg);
+            fsOverlay.appendChild(svg);
+            fsOverlay.classList.add("active");
+            _touchTarget = fsOverlay;
+            bindTouch(fsOverlay);
+            document.body.style.overflow = "hidden";
+            document.addEventListener("keydown", onFsKey);
+          }
+          function closeMapFs() {
+            if (!fsOverlay || !svg) return;
+            unbindTouch(fsOverlay);
+            svgPlaceholder.parentNode.insertBefore(svg, svgPlaceholder);
+            svgPlaceholder.parentNode.removeChild(svgPlaceholder);
+            fsOverlay.classList.remove("active");
+            _touchTarget = wrap;
+            bindTouch(wrap);
+            document.body.style.overflow = "";
+            document.removeEventListener("keydown", onFsKey);
+          }
+          function onFsKey(e) {
+            if (e.key === "Escape") closeMapFs();
+          }
+
+          if (fsBtn) fsBtn.addEventListener("click", openMapFs);
+          if (fsClose) fsClose.addEventListener("click", closeMapFs);
+          // Zoom buttons
+          var btnIn = $("mapZoomIn"),
+            btnOut = $("mapZoomOut"),
+            btnReset = $("mapZoomReset");
+          if (btnIn)
+            btnIn.addEventListener("click", function () {
+              var c = svg.clientWidth / 2;
+              zoomAt(1.5, c, svg.clientHeight / 2);
+            });
+          if (btnOut)
+            btnOut.addEventListener("click", function () {
+              var c = svg.clientWidth / 2;
+              zoomAt(1 / 1.5, c, svg.clientHeight / 2);
+            });
+          if (btnReset)
+            btnReset.addEventListener("click", function () {
+              scale = 1;
+              tx = 0;
+              ty = 0;
+              applyTransform();
+            });
+        })();
+
+        // Apply pending data
+        if (Object.keys(_countryCounts).length) {
+          updateHighlights(_countryCounts);
+          updateArcs(_countryCounts);
+          updateLabels(_countryCounts);
         }
-        lastDist=dist;
-      } else if(pts.length===1 && dragging){
-        var t2=pts[0];
-        tx=dragTx+(t2.clientX-dragStartX);
-        ty=dragTy+(t2.clientY-dragStartY);
-        applyTransform();
-      }
-      e.preventDefault();
-    }
-    function onTouchEnd(e){
-      Array.from(e.changedTouches).forEach(function(t){ delete touches[t.identifier]; });
-      lastDist=null;
-      if(!Object.keys(touches).length) dragging=false;
-    }
-    function bindTouch(el){
-      el.addEventListener('touchstart',onTouchStart,{passive:false});
-      el.addEventListener('touchmove',onTouchMove,{passive:false});
-      el.addEventListener('touchend',onTouchEnd);
-    }
-    function unbindTouch(el){
-      el.removeEventListener('touchstart',onTouchStart);
-      el.removeEventListener('touchmove',onTouchMove);
-      el.removeEventListener('touchend',onTouchEnd);
-    }
-    bindTouch(wrap);
-
-    // Fullscreen — portal the SVG into a body-level overlay to escape stacking contexts
-    var fsBtn=$('mapFullscreenBtn');
-    var fsOverlay=$('mapFsOverlay');
-    var fsClose=$('mapFsClose');
-    // svgPlaceholder marks where the SVG lives when not in fullscreen
-    var svgPlaceholder=document.createComment('map-svg-placeholder');
-
-    function isMobile(){ return window.innerWidth<=767; }
-
-    function openMapFs(){
-      if(!fsOverlay||!svg) return;
-      unbindTouch(wrap);
-      svg.parentNode.insertBefore(svgPlaceholder, svg);
-      fsOverlay.appendChild(svg);
-      fsOverlay.classList.add('active');
-      _touchTarget=fsOverlay;
-      bindTouch(fsOverlay);
-      document.body.style.overflow='hidden';
-      document.addEventListener('keydown',onFsKey);
-    }
-    function closeMapFs(){
-      if(!fsOverlay||!svg) return;
-      unbindTouch(fsOverlay);
-      svgPlaceholder.parentNode.insertBefore(svg, svgPlaceholder);
-      svgPlaceholder.parentNode.removeChild(svgPlaceholder);
-      fsOverlay.classList.remove('active');
-      _touchTarget=wrap;
-      bindTouch(wrap);
-      document.body.style.overflow='';
-      document.removeEventListener('keydown',onFsKey);
-    }
-    function onFsKey(e){ if(e.key==='Escape') closeMapFs(); }
-
-    if(fsBtn) fsBtn.addEventListener('click', openMapFs);
-    if(fsClose) fsClose.addEventListener('click', closeMapFs);
-    // Zoom buttons
-    var btnIn=$('mapZoomIn'), btnOut=$('mapZoomOut'), btnReset=$('mapZoomReset');
-    if(btnIn)    btnIn.addEventListener('click',function(){ var c=svg.clientWidth/2; zoomAt(1.5,c,svg.clientHeight/2); });
-    if(btnOut)   btnOut.addEventListener('click',function(){ var c=svg.clientWidth/2; zoomAt(1/1.5,c,svg.clientHeight/2); });
-    if(btnReset) btnReset.addEventListener('click',function(){ scale=1;tx=0;ty=0; applyTransform(); });
-  })();
-
-      // Apply pending data
-      if(Object.keys(_countryCounts).length){
-        updateHighlights(_countryCounts);
-        updateArcs(_countryCounts);
-        updateLabels(_countryCounts);
-      }
-    };
-    document.head.appendChild(s);
-  }).catch(function(e){console.warn('[worldmap]',e);});
+      };
+      document.head.appendChild(s);
+    })
+    .catch(function (e) {
+      console.warn("[worldmap]", e);
+    });
 
   // Fetch local country once on connect (WAN IP geolocation for arc origin)
   var _localCCFetched = false;
-  socket.on('connect', function(){
+  socket.on("connect", function () {
     _localCCFetched = false;
   });
-  function fetchLocalCCOnce(){
-    if(_localCCFetched) return;
+  function fetchLocalCCOnce() {
+    if (_localCCFetched) return;
     _localCCFetched = true;
-    fetch('/api/localcc').then(function(r){return r.json();}).then(function(d){
-      if(d.cc){ _localCC=d.cc; updateArcs(_countryCounts); }
-    }).catch(function(){ _localCCFetched = false; });
+    fetch("/api/localcc")
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (d) {
+        if (d.cc) {
+          _localCC = d.cc;
+          updateArcs(_countryCounts);
+        }
+      })
+      .catch(function () {
+        _localCCFetched = false;
+      });
   }
 
   // conn:update handler
-  socket.on('conn:update',function(data){
-    var topCountries=data.topCountries||[];
+  socket.on("conn:update", function (data) {
+    var topCountries = data.topCountries || [];
     // Detect which countries gained connections vs last poll
-    var prevCounts=_countryCounts;
+    var prevCounts = _countryCounts;
     // Update caches
-    topCountries.forEach(function(e){
-      _countryProto[e.cc]=e.proto||{};
-      _countryCity[e.cc]=e.city||'';
+    topCountries.forEach(function (e) {
+      _countryProto[e.cc] = e.proto || {};
+      _countryCity[e.cc] = e.city || "";
       pushSpark(e.cc, e.count);
     });
     // Rebuild counts from topCountries
-    var counts={};
-    topCountries.forEach(function(e){ counts[e.cc]=e.count; });
-    _countryCounts=counts;
+    var counts = {};
+    topCountries.forEach(function (e) {
+      counts[e.cc] = e.count;
+    });
+    _countryCounts = counts;
     // Pulse countries that gained new connections
-    if(data.newSinceLast>0){
-      Object.keys(counts).forEach(function(cc){
-        if((counts[cc]||0)>(prevCounts[cc]||0)){
-          var el=_pathEls[cc]; if(!el) return;
-          el.classList.remove('pulse');
+    if (data.newSinceLast > 0) {
+      Object.keys(counts).forEach(function (cc) {
+        if ((counts[cc] || 0) > (prevCounts[cc] || 0)) {
+          var el = _pathEls[cc];
+          if (!el) return;
+          el.classList.remove("pulse");
           // rAF double-frame: lets browser commit style removal before re-adding,
           // avoiding a forced synchronous layout reflow
-          requestAnimationFrame(function(){ requestAnimationFrame(function(){
-            el.classList.add('pulse');
-            setTimeout(function(){ el.classList.remove('pulse'); }, 750);
-          }); });
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              el.classList.add("pulse");
+              setTimeout(function () {
+                el.classList.remove("pulse");
+              }, 750);
+            });
+          });
         }
       });
     }
@@ -2414,132 +4403,228 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
     fetchLocalCCOnce();
 
     _lastConnPayload = data;
-    updateHighlights(_selectedCC ? (function(){ var f={}; f[_selectedCC]=counts[_selectedCC]||0; return f; })() : counts);
-    updateArcs(_selectedCC ? (function(){ var f={}; f[_selectedCC]=counts[_selectedCC]||0; return f; })() : counts);
+    updateHighlights(
+      _selectedCC
+        ? (function () {
+            var f = {};
+            f[_selectedCC] = counts[_selectedCC] || 0;
+            return f;
+          })()
+        : counts,
+    );
+    updateArcs(
+      _selectedCC
+        ? (function () {
+            var f = {};
+            f[_selectedCC] = counts[_selectedCC] || 0;
+            return f;
+          })()
+        : counts,
+    );
     updateLabels(counts);
     renderCountryList(topCountries, _selectedCC);
     // Re-apply country filter so port list and Sankey stay filtered across ticks
     if (_selectedCC) {
       applyCountryFilter(_selectedCC);
     } else {
-      renderPortList(data.topPorts||[]);
+      renderPortList(data.topPorts || []);
     }
   });
 
   // Reset map state on router switch so stale country counts don't linger
-  socket.on('router:switching', function() {
+  socket.on("router:switching", function () {
     _countryCounts = {};
-    _countryProto  = {};
-    _countryCity   = {};
-    _sparkData     = {};
-    _selectedCC    = null;
+    _countryProto = {};
+    _countryCity = {};
+    _sparkData = {};
+    _selectedCC = null;
     _lastConnPayload = null;
     updateHighlights({});
     updateArcs({});
     updateLabels({});
-    var sub = $('connMapSub');
-    if (sub) sub.textContent = 'Top connection destinations';
-    var list = $('connMapList');
-    if (list) list.innerHTML = '';
+    var sub = $("connMapSub");
+    if (sub) sub.textContent = "Top connection destinations";
+    var list = $("connMapList");
+    if (list) list.innerHTML = "";
   });
 })();
 
-
 // ── Sankey: Connection Flow (Sources → Destinations) ─────────────────────────
-(function(){
-  var svgEl   = $('sankeySvg');
-  var emptyEl = $('sankeyEmpty');
-  if(!svgEl) return;
+(function () {
+  var svgEl = $("sankeySvg");
+  var emptyEl = $("sankeyEmpty");
+  if (!svgEl) return;
 
-  var NS = 'http://www.w3.org/2000/svg';
+  var NS = "http://www.w3.org/2000/svg";
 
   // Category colour map (matches svc-badge palette, semi-transparent for links)
   var CAT_COLOUR = {
-    cdn:       '#38bdf8',  // sky blue
-    cloud:     '#fb923c',  // orange
-    social:    '#c084fc',  // purple
-    streaming: '#ec4899',  // pink
-    messaging: '#34d399',  // emerald
-    video:     '#fbbf24',  // amber
-    dns:       '#2dd4bf',  // teal
-    other:     '#6382be',
+    cdn: "#38bdf8", // sky blue
+    cloud: "#fb923c", // orange
+    social: "#c084fc", // purple
+    streaming: "#ec4899", // pink
+    messaging: "#34d399", // emerald
+    video: "#fbbf24", // amber
+    dns: "#2dd4bf", // teal
+    other: "#6382be",
   };
   // A palette for source nodes (LAN hosts)
-  var SRC_COLOURS = ['#38bdf8','#818cf8','#a78bfa','#67e8f9','#93c5fd','#6ee7b7'];
+  var SRC_COLOURS = [
+    "#38bdf8",
+    "#818cf8",
+    "#a78bfa",
+    "#67e8f9",
+    "#93c5fd",
+    "#6ee7b7",
+  ];
 
-  function nodeColour(node, idx){
-    if(node.side==='dst') return CAT_COLOUR[node.cat||'other']||CAT_COLOUR.other;
+  function nodeColour(node, idx) {
+    if (node.side === "dst")
+      return CAT_COLOUR[node.cat || "other"] || CAT_COLOUR.other;
     return SRC_COLOURS[idx % SRC_COLOURS.length];
   }
 
-  function svgEl_(tag, attrs){
-    var el=document.createElementNS(NS,tag);
-    Object.keys(attrs).forEach(function(k){ el.setAttribute(k,attrs[k]); });
+  function svgEl_(tag, attrs) {
+    var el = document.createElementNS(NS, tag);
+    Object.keys(attrs).forEach(function (k) {
+      el.setAttribute(k, attrs[k]);
+    });
     return el;
   }
 
   // Build a cubic bezier path between two horizontal points
-  function linkPath(x0,y0,x1,y1,w0,w1){
-    var mx=(x0+x1)/2;
+  function linkPath(x0, y0, x1, y1, w0, w1) {
+    var mx = (x0 + x1) / 2;
     // Top and bottom curves of the ribbon
-    var ty0=y0, ty1=y1, by0=y0+w0, by1=y1+w1;
-    return 'M'+x0+','+ty0+
-      ' C'+mx+','+ty0+' '+mx+','+ty1+' '+x1+','+ty1+
-      ' L'+x1+','+by1+
-      ' C'+mx+','+by1+' '+mx+','+by0+' '+x0+','+by0+
-      ' Z';
+    var ty0 = y0,
+      ty1 = y1,
+      by0 = y0 + w0,
+      by1 = y1 + w1;
+    return (
+      "M" +
+      x0 +
+      "," +
+      ty0 +
+      " C" +
+      mx +
+      "," +
+      ty0 +
+      " " +
+      mx +
+      "," +
+      ty1 +
+      " " +
+      x1 +
+      "," +
+      ty1 +
+      " L" +
+      x1 +
+      "," +
+      by1 +
+      " C" +
+      mx +
+      "," +
+      by1 +
+      " " +
+      mx +
+      "," +
+      by0 +
+      " " +
+      x0 +
+      "," +
+      by0 +
+      " Z"
+    );
   }
 
-  function render(sources, destinations){
-    svgEl.innerHTML='';
-    var total=0;
-    sources.forEach(function(s){ total+=s.count; });
-    if(!total||!sources.length||!destinations.length){
-      emptyEl.style.display='block'; svgEl.style.display='none'; return;
+  function render(sources, destinations) {
+    svgEl.innerHTML = "";
+    var total = 0;
+    sources.forEach(function (s) {
+      total += s.count;
+    });
+    if (!total || !sources.length || !destinations.length) {
+      emptyEl.style.display = "block";
+      svgEl.style.display = "none";
+      return;
     }
-    emptyEl.style.display='none'; svgEl.style.display='block';
+    emptyEl.style.display = "none";
+    svgEl.style.display = "block";
 
     // Layout constants
-    var W=svgEl.parentElement.clientWidth||600;
-    if(W<200) W=600;
-    var NODE_W=12, GAP=6, PAD_X=110, PAD_Y=10;
-    var innerH=Math.max(260, sources.length*36+80);
-    var H=innerH+PAD_Y*2;
-    svgEl.setAttribute('viewBox','0 0 '+W+' '+H);
-    svgEl.setAttribute('height',H);
+    var W = svgEl.parentElement.clientWidth || 600;
+    if (W < 200) W = 600;
+    var NODE_W = 12,
+      GAP = 6,
+      PAD_X = 110,
+      PAD_Y = 10;
+    var innerH = Math.max(260, sources.length * 36 + 80);
+    var H = innerH + PAD_Y * 2;
+    svgEl.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svgEl.setAttribute("height", H);
 
-    var srcX=PAD_X, dstX=W-PAD_X-NODE_W;
-    var drawH=H-PAD_Y*2;
+    var srcX = PAD_X,
+      dstX = W - PAD_X - NODE_W;
+    var drawH = H - PAD_Y * 2;
 
     // Scale: total connections → drawH (minus gaps)
-    var srcGapTotal=GAP*(sources.length-1);
-    var dstGapTotal=GAP*(destinations.length-1);
-    var srcScale=(drawH-srcGapTotal)/total;
-    var dstScale=(drawH-dstGapTotal)/total;
+    var srcGapTotal = GAP * (sources.length - 1);
+    var dstGapTotal = GAP * (destinations.length - 1);
+    var srcScale = (drawH - srcGapTotal) / total;
+    var dstScale = (drawH - dstGapTotal) / total;
 
     // Assign Y positions to source nodes
-    var srcNodes=[], y=PAD_Y;
-    sources.forEach(function(s,i){
-      var h=Math.max(4, s.count*srcScale);
-      srcNodes.push({id:s.ip||s.name, label:s.name||s.ip, count:s.count, x:srcX, y:y, h:h, side:'src', cursor:y});
-      y+=h+GAP;
+    var srcNodes = [],
+      y = PAD_Y;
+    sources.forEach(function (s, i) {
+      var h = Math.max(4, s.count * srcScale);
+      srcNodes.push({
+        id: s.ip || s.name,
+        label: s.name || s.ip,
+        count: s.count,
+        x: srcX,
+        y: y,
+        h: h,
+        side: "src",
+        cursor: y,
+      });
+      y += h + GAP;
     });
 
     // Aggregate destinations: use org label if present, else country, else IP
-    var dstMap={};
-    destinations.forEach(function(d){
-      var key=d.org||(d.country?('['+d.country+']'):(d.key||d.ip||'?'));
-      if(!dstMap[key]) dstMap[key]={label:key, count:0, cat:d.cat||'other'};
-      dstMap[key].count+=d.count;
+    var dstMap = {};
+    destinations.forEach(function (d) {
+      var key =
+        d.org || (d.country ? "[" + d.country + "]" : d.key || d.ip || "?");
+      if (!dstMap[key])
+        dstMap[key] = { label: key, count: 0, cat: d.cat || "other" };
+      dstMap[key].count += d.count;
     });
-    var dstArr=Object.values(dstMap).sort(function(a,b){return b.count-a.count;}).slice(0,10);
+    var dstArr = Object.values(dstMap)
+      .sort(function (a, b) {
+        return b.count - a.count;
+      })
+      .slice(0, 10);
     // Re-scale dstArr to match source total
-    var dstTotal=0; dstArr.forEach(function(d){dstTotal+=d.count;});
-    var dstNodes=[], dy=PAD_Y;
-    dstArr.forEach(function(d,i){
-      var h=Math.max(4,(d.count/dstTotal)*total*dstScale);
-      dstNodes.push({label:d.label, count:d.count, cat:d.cat, x:dstX, y:dy, h:h, side:'dst', cursor:dy});
-      dy+=h+GAP;
+    var dstTotal = 0;
+    dstArr.forEach(function (d) {
+      dstTotal += d.count;
+    });
+    var dstNodes = [],
+      dy = PAD_Y;
+    dstArr.forEach(function (d, i) {
+      var h = Math.max(4, (d.count / dstTotal) * total * dstScale);
+      dstNodes.push({
+        label: d.label,
+        count: d.count,
+        cat: d.cat,
+        x: dstX,
+        y: dy,
+        h: h,
+        side: "dst",
+        cursor: dy,
+      });
+      dy += h + GAP;
     });
 
     // Build src→dst flows.
@@ -2548,242 +4633,427 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
     // destination weight, and vice-versa.
     //   src-side ribbon width = fraction of src node height  = src.h * (dst.count/dstTotal)
     //   dst-side ribbon width = fraction of dst node height  = dst.h * (src.count/srcSum)
-    var links=[];
-    var srcSum=0; srcNodes.forEach(function(s){srcSum+=s.count;});
-    srcNodes.forEach(function(src){
-      dstNodes.forEach(function(dst){
-        var sw=src.h*(dst.count/dstTotal);   // slice of src bar
-        var dw=dst.h*(src.count/srcSum);     // slice of dst bar
-        if(sw<0.5&&dw<0.5) return;           // skip invisible ribbons
-        links.push({src:src, dst:dst,
-          sw:Math.max(1,sw), dw:Math.max(1,dw),
-          sy:src.cursor, dy:dst.cursor,
-          cat:dst.cat});
-        src.cursor+=sw;
-        dst.cursor+=dw;
+    var links = [];
+    var srcSum = 0;
+    srcNodes.forEach(function (s) {
+      srcSum += s.count;
+    });
+    srcNodes.forEach(function (src) {
+      dstNodes.forEach(function (dst) {
+        var sw = src.h * (dst.count / dstTotal); // slice of src bar
+        var dw = dst.h * (src.count / srcSum); // slice of dst bar
+        if (sw < 0.5 && dw < 0.5) return; // skip invisible ribbons
+        links.push({
+          src: src,
+          dst: dst,
+          sw: Math.max(1, sw),
+          dw: Math.max(1, dw),
+          sy: src.cursor,
+          dy: dst.cursor,
+          cat: dst.cat,
+        });
+        src.cursor += sw;
+        dst.cursor += dw;
       });
     });
 
     // Draw links first (behind nodes)
-    var linkG=svgEl_(  'g',{});
-    links.forEach(function(lk){
-      var colour=CAT_COLOUR[lk.cat||'other']||CAT_COLOUR.other;
-      var p=svgEl_('path',{
-        'd':linkPath(lk.src.x+NODE_W, lk.sy, lk.dst.x, lk.dy, Math.max(1,lk.sw), Math.max(1,lk.dw)),
-        'fill':colour, 'class':'sk-link'
+    var linkG = svgEl_("g", {});
+    links.forEach(function (lk) {
+      var colour = CAT_COLOUR[lk.cat || "other"] || CAT_COLOUR.other;
+      var p = svgEl_("path", {
+        d: linkPath(
+          lk.src.x + NODE_W,
+          lk.sy,
+          lk.dst.x,
+          lk.dy,
+          Math.max(1, lk.sw),
+          Math.max(1, lk.dw),
+        ),
+        fill: colour,
+        class: "sk-link",
       });
       // Tooltip on hover
-      var title=document.createElementNS(NS,'title');
-      title.textContent=lk.src.label+' → '+lk.dst.label;
+      var title = document.createElementNS(NS, "title");
+      title.textContent = lk.src.label + " → " + lk.dst.label;
       p.appendChild(title);
       linkG.appendChild(p);
     });
     svgEl.appendChild(linkG);
 
     // Draw source nodes
-    srcNodes.forEach(function(n,i){
-      var col=nodeColour(n,i);
-      var g=svgEl_('g',{'class':'sk-node','transform':'translate('+n.x+','+n.y+')'});
-      g.appendChild(svgEl_('rect',{'width':NODE_W,'height':Math.max(4,n.h),'fill':col,'rx':'3','ry':'3'}));
+    srcNodes.forEach(function (n, i) {
+      var col = nodeColour(n, i);
+      var g = svgEl_("g", {
+        class: "sk-node",
+        transform: "translate(" + n.x + "," + n.y + ")",
+      });
+      g.appendChild(
+        svgEl_("rect", {
+          width: NODE_W,
+          height: Math.max(4, n.h),
+          fill: col,
+          rx: "3",
+          ry: "3",
+        }),
+      );
       // Label left of node
-      var lbl=svgEl_('text',{'x':-6,'y':Math.max(4,n.h)/2,'dominant-baseline':'middle','class':'sk-lbl-left'});
-      var short=n.label.length>16?n.label.slice(0,15)+'…':n.label;
-      lbl.textContent=short;
+      var lbl = svgEl_("text", {
+        x: -6,
+        y: Math.max(4, n.h) / 2,
+        "dominant-baseline": "middle",
+        class: "sk-lbl-left",
+      });
+      var short = n.label.length > 16 ? n.label.slice(0, 15) + "…" : n.label;
+      lbl.textContent = short;
       g.appendChild(lbl);
-      var title=document.createElementNS(NS,'title');
-      title.textContent=n.label+' · '+n.count+' conns';
+      var title = document.createElementNS(NS, "title");
+      title.textContent = n.label + " · " + n.count + " conns";
       g.appendChild(title);
       svgEl.appendChild(g);
     });
 
     // Draw destination nodes
-    dstNodes.forEach(function(n,i){
-      var col=nodeColour(n,i);
-      var g=svgEl_('g',{'class':'sk-node','transform':'translate('+n.x+','+n.y+')'});
-      g.appendChild(svgEl_('rect',{'width':NODE_W,'height':Math.max(4,n.h),'fill':col,'rx':'3','ry':'3'}));
+    dstNodes.forEach(function (n, i) {
+      var col = nodeColour(n, i);
+      var g = svgEl_("g", {
+        class: "sk-node",
+        transform: "translate(" + n.x + "," + n.y + ")",
+      });
+      g.appendChild(
+        svgEl_("rect", {
+          width: NODE_W,
+          height: Math.max(4, n.h),
+          fill: col,
+          rx: "3",
+          ry: "3",
+        }),
+      );
       // Label right of node
-      var lbl=svgEl_('text',{'x':NODE_W+6,'y':Math.max(4,n.h)/2,'dominant-baseline':'middle','class':'sk-lbl-right'});
-      var short=n.label.length>16?n.label.slice(0,15)+'…':n.label;
-      lbl.textContent=short;
+      var lbl = svgEl_("text", {
+        x: NODE_W + 6,
+        y: Math.max(4, n.h) / 2,
+        "dominant-baseline": "middle",
+        class: "sk-lbl-right",
+      });
+      var short = n.label.length > 16 ? n.label.slice(0, 15) + "…" : n.label;
+      lbl.textContent = short;
       g.appendChild(lbl);
-      var title=document.createElementNS(NS,'title');
-      title.textContent=n.label+' · '+n.count+' conns';
+      var title = document.createElementNS(NS, "title");
+      title.textContent = n.label + " · " + n.count + " conns";
       g.appendChild(title);
       svgEl.appendChild(g);
     });
   }
 
   // Listen for conn:update — throttle renders + skip if data unchanged
-  var _lastSrcs=[], _lastDsts=[], _resizeTimer=null;
-  var _sankeyFp='', _sankeyPending=false, _sankeyLast=0;
-  var SANKEY_THROTTLE=5000; // ms between full re-renders
+  var _lastSrcs = [],
+    _lastDsts = [],
+    _resizeTimer = null;
+  var _sankeyFp = "",
+    _sankeyPending = false,
+    _sankeyLast = 0;
+  var SANKEY_THROTTLE = 5000; // ms between full re-renders
   // When a country filter is active, the map IIFE owns Sankey rendering.
   // The conn:update handler updates stored full data but skips its own render
   // to prevent overwriting the filtered view on every poll cycle.
   var _filteredByCC = false;
 
   // Called by applyCountryFilter with filtered srcs/dsts — marks filter active.
-  window._connSankeyRender = function(srcs, dsts) {
+  window._connSankeyRender = function (srcs, dsts) {
     _filteredByCC = true;
-    _lastSrcs = srcs; _lastDsts = dsts;
+    _lastSrcs = srcs;
+    _lastDsts = dsts;
     render(_lastSrcs, _lastDsts);
   };
 
   // Called by applyCountryFilter(null) to clear filter and immediately re-render
   // with unfiltered data. Does NOT set _filteredByCC so conn:update resumes normally.
-  window._connSankeyClearFilter = function(srcs, dsts) {
+  window._connSankeyClearFilter = function (srcs, dsts) {
     _filteredByCC = false;
-    _sankeyFp = ''; // force re-render with full data on next tick
+    _sankeyFp = ""; // force re-render with full data on next tick
     if (srcs && dsts) {
-      _lastSrcs = srcs; _lastDsts = dsts;
+      _lastSrcs = srcs;
+      _lastDsts = dsts;
       render(_lastSrcs, _lastDsts);
     }
   };
 
-  socket.on('conn:update',function(data){
-    var srcs=(data.topSources||[]).slice(0,8);
-    var dsts=(data.topDestinations||[]).slice(0,10);
-    var fp=JSON.stringify(srcs)+JSON.stringify(dsts);
+  socket.on("conn:update", function (data) {
+    var srcs = (data.topSources || []).slice(0, 8);
+    var dsts = (data.topDestinations || []).slice(0, 10);
+    var fp = JSON.stringify(srcs) + JSON.stringify(dsts);
     // While a country filter is active: store the full data (so applyCountryFilter
     // can re-derive filtered ports/dsts from the latest payload) but do not
     // render here — applyCountryFilter handles it after this handler returns.
-    if(_filteredByCC) { _sankeyFp=fp; return; }
-    if(fp===_sankeyFp) return; // data unchanged — skip
-    _sankeyFp=fp;
-    _lastSrcs=srcs; _lastDsts=dsts;
-    var now=Date.now();
-    if(now-_sankeyLast>=SANKEY_THROTTLE){
-      _sankeyLast=now; render(_lastSrcs,_lastDsts);
-    } else if(!_sankeyPending){
-      _sankeyPending=true;
-      setTimeout(function(){
-        _sankeyPending=false; _sankeyLast=Date.now(); render(_lastSrcs,_lastDsts);
-      }, SANKEY_THROTTLE-(now-_sankeyLast));
+    if (_filteredByCC) {
+      _sankeyFp = fp;
+      return;
+    }
+    if (fp === _sankeyFp) return; // data unchanged — skip
+    _sankeyFp = fp;
+    _lastSrcs = srcs;
+    _lastDsts = dsts;
+    var now = Date.now();
+    if (now - _sankeyLast >= SANKEY_THROTTLE) {
+      _sankeyLast = now;
+      render(_lastSrcs, _lastDsts);
+    } else if (!_sankeyPending) {
+      _sankeyPending = true;
+      setTimeout(
+        function () {
+          _sankeyPending = false;
+          _sankeyLast = Date.now();
+          render(_lastSrcs, _lastDsts);
+        },
+        SANKEY_THROTTLE - (now - _sankeyLast),
+      );
     }
   });
-  window.addEventListener('resize',function(){
+  window.addEventListener("resize", function () {
     clearTimeout(_resizeTimer);
-    _resizeTimer=setTimeout(function(){ render(_lastSrcs,_lastDsts); },120);
+    _resizeTimer = setTimeout(function () {
+      render(_lastSrcs, _lastDsts);
+    }, 120);
   });
   // Re-render when navigating to the connections page — the SVG clientWidth is
   // 0 while the page is hidden, so the first render uses a fallback width.
   // Firing again on pageshow gives it the real width immediately.
-  document.addEventListener('mikrodash:pagechange',function(e){
-    if(e.detail==='connections') render(_lastSrcs,_lastDsts);
+  document.addEventListener("mikrodash:pagechange", function (e) {
+    if (e.detail === "connections") render(_lastSrcs, _lastDsts);
   });
 })();
 
 // ── IP tooltip ───────────────────────────────────────────────────────────────
-(function(){
-  var tip = document.createElement('div');
-  tip.className = 'ip-tip';
+(function () {
+  var tip = document.createElement("div");
+  tip.className = "ip-tip";
   document.body.appendChild(tip);
-  function showTip(el, e){
-    var ip=el.dataset.ip||'', org=el.dataset.org||'', cat=el.dataset.cat||'';
-    if(!ip){tip.style.display='none';return;}
-    tip.innerHTML=esc(ip)+(org?'<span class="ip-tip-org">'+esc(org)+'</span>'+
-      '<span class="ip-tip-cat svc-badge svc-'+(cat||'other')+'">'+esc(cat)+'</span>':'');
-    tip.style.transform='translate('+(e.clientX+14)+'px,'+(e.clientY-32)+'px)';
-    tip.style.display='block';
+  function showTip(el, e) {
+    var ip = el.dataset.ip || "",
+      org = el.dataset.org || "",
+      cat = el.dataset.cat || "";
+    if (!ip) {
+      tip.style.display = "none";
+      return;
+    }
+    tip.innerHTML =
+      esc(ip) +
+      (org
+        ? '<span class="ip-tip-org">' +
+          esc(org) +
+          "</span>" +
+          '<span class="ip-tip-cat svc-badge svc-' +
+          (cat || "other") +
+          '">' +
+          esc(cat) +
+          "</span>"
+        : "");
+    tip.style.transform =
+      "translate(" + (e.clientX + 14) + "px," + (e.clientY - 32) + "px)";
+    tip.style.display = "block";
   }
-  document.addEventListener('mouseover',function(e){
-    var el=e.target.closest&&e.target.closest('.has-ip-tip');
-    if(el) showTip(el,e); else tip.style.display='none';
+  document.addEventListener("mouseover", function (e) {
+    var el = e.target.closest && e.target.closest(".has-ip-tip");
+    if (el) showTip(el, e);
+    else tip.style.display = "none";
   });
-  document.addEventListener('mousemove',function(e){
-    if(tip.style.display==='none') return;
-    tip.style.transform='translate('+(e.clientX+14)+'px,'+(e.clientY-32)+'px)';
+  document.addEventListener("mousemove", function (e) {
+    if (tip.style.display === "none") return;
+    tip.style.transform =
+      "translate(" + (e.clientX + 14) + "px," + (e.clientY - 32) + "px)";
   });
-  document.addEventListener('mouseleave',function(){ tip.style.display='none'; },true);
+  document.addEventListener(
+    "mouseleave",
+    function () {
+      tip.style.display = "none";
+    },
+    true,
+  );
 })();
 
 // ── Mobile burger menu ──────────────────────────────────────────────
-(function(){
-  var burger  = $('burgerBtn');
-  var sidenav = $('sidenav');
-  var overlay = $('navOverlay');
-  if(!burger||!sidenav) return;
-  function openNav(){sidenav.classList.add('mobile-open');overlay.classList.add('show');}
-  function closeNav(){sidenav.classList.remove('mobile-open');overlay.classList.remove('show');}
-  burger.addEventListener('click', function(){ sidenav.classList.contains('mobile-open') ? closeNav() : openNav(); });
-  overlay.addEventListener('click', closeNav);
-  document.querySelectorAll('.nav-item').forEach(function(item){
-    item.addEventListener('click', function(){
-      if(window.innerWidth<=767) closeNav();
+(function () {
+  var burger = $("burgerBtn");
+  var sidenav = $("sidenav");
+  var overlay = $("navOverlay");
+  if (!burger || !sidenav) return;
+  function openNav() {
+    sidenav.classList.add("mobile-open");
+    overlay.classList.add("show");
+  }
+  function closeNav() {
+    sidenav.classList.remove("mobile-open");
+    overlay.classList.remove("show");
+  }
+  burger.addEventListener("click", function () {
+    sidenav.classList.contains("mobile-open") ? closeNav() : openNav();
+  });
+  overlay.addEventListener("click", closeNav);
+  document.querySelectorAll(".nav-item").forEach(function (item) {
+    item.addEventListener("click", function () {
+      if (window.innerWidth <= 767) closeNav();
     });
   });
 })();
 
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Settings Page
 // ═══════════════════════════════════════════════════════════════════════════
-(function(){
+(function () {
   var POLL_SLIDERS = [
     // Polled — user-configurable interval
-    { key:'pollSystem',    label:'System / Gauges', min:500,   max:30000,  step:500,   unit:'ms' },
-    { key:'pollConns',     label:'Connections',     min:500,   max:30000,  step:500,   unit:'ms' },
-    { key:'pollTalkers',   label:'Top Talkers',     min:500,   max:30000,  step:500,   unit:'ms' },
-    { key:'pollBandwidth', label:'Bandwidth',       min:500,   max:30000,  step:500,   unit:'ms' },
-    { key:'pollVpn',       label:'VPN / WireGuard', min:500,   max:30000,  step:500,   unit:'ms' },
-    { key:'pollFirewall',  label:'Firewall',        min:500,   max:30000,  step:500,   unit:'ms' },
-    { key:'pollPing',      label:'Ping',            min:500,   max:30000,  step:500,   unit:'ms' },
-    { key:'pollWireless',  label:'Wireless',        min:500,   max:60000,  step:500,   unit:'ms' },
-    { key:'pollDhcp',      label:'DHCP Networks',   min:30000, max:600000, step:30000, unit:'ms' },
+    {
+      key: "pollSystem",
+      label: "System / Gauges",
+      min: 500,
+      max: 30000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollConns",
+      label: "Connections",
+      min: 500,
+      max: 30000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollTalkers",
+      label: "Top Talkers",
+      min: 500,
+      max: 30000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollBandwidth",
+      label: "Bandwidth",
+      min: 500,
+      max: 30000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollVpn",
+      label: "VPN / WireGuard",
+      min: 500,
+      max: 30000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollFirewall",
+      label: "Firewall",
+      min: 500,
+      max: 30000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollPing",
+      label: "Ping",
+      min: 500,
+      max: 30000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollWireless",
+      label: "Wireless",
+      min: 500,
+      max: 60000,
+      step: 500,
+      unit: "ms",
+    },
+    {
+      key: "pollDhcp",
+      label: "DHCP Networks",
+      min: 30000,
+      max: 600000,
+      step: 30000,
+      unit: "ms",
+    },
     // Streamed — RouterOS pushes changes, no poll interval needed
-    { key:'pollIfstatus',  label:'Interfaces',  streamed:true },
-    { key:'pollArp',       label:'ARP',         streamed:true },
-    { key:'pollRouting',   label:'Routing',     streamed:true },
+    { key: "pollIfstatus", label: "Interfaces", streamed: true },
+    { key: "pollArp", label: "ARP", streamed: true },
+    { key: "pollRouting", label: "Routing", streamed: true },
   ];
 
   var _loaded = {};
-  var banner = $('settingsBanner');
-  var saveBtn = $('settingsSaveBtn');
-  var resetBtn = $('settingsResetBtn');
-  var routerNotice = $('routerRestartNotice');
+  var banner = $("settingsBanner");
+  var saveBtn = $("settingsSaveBtn");
+  var resetBtn = $("settingsResetBtn");
+  var routerNotice = $("routerRestartNotice");
 
   function fmtMs(ms) {
-    if (ms >= 60000) return (ms/60000).toFixed(0)+'m';
-    if (ms >= 1000)  return (ms/1000).toFixed(ms%1000===0?0:1)+'s';
-    return ms+'ms';
+    if (ms >= 60000) return (ms / 60000).toFixed(0) + "m";
+    if (ms >= 1000) return (ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1) + "s";
+    return ms + "ms";
   }
 
   function showBanner(type, msg) {
     if (!banner) return;
-    banner.className = 'sbanner show sbanner-'+type;
+    banner.className = "sbanner show sbanner-" + type;
     banner.textContent = msg;
-    if (type !== 'err') setTimeout(function(){ banner.className='sbanner'; }, 4000);
+    if (type !== "err")
+      setTimeout(function () {
+        banner.className = "sbanner";
+      }, 4000);
   }
 
   function buildSliders(data) {
-    var wrap = $('pollSlidersWrap'); if (!wrap) return;
-    wrap.innerHTML = '';
-    POLL_SLIDERS.forEach(function(cfg) {
-      var row = document.createElement('div');
-      row.style.cssText = 'margin-bottom:.7rem';
+    var wrap = $("pollSlidersWrap");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    POLL_SLIDERS.forEach(function (cfg) {
+      var row = document.createElement("div");
+      row.style.cssText = "margin-bottom:.7rem";
       if (cfg.streamed) {
         row.innerHTML =
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem">' +
-            '<span style="font-size:.75rem;color:var(--text-muted)">'+cfg.label+'</span>' +
-            '<span style="font-size:.68rem;font-family:var(--font-ui);padding:.15rem .5rem;border-radius:4px;background:rgba(99,190,130,.12);color:#6dba8a;border:1px solid rgba(99,190,130,.25)">Event-driven</span>' +
-          '</div>';
+          '<span style="font-size:.75rem;color:var(--text-muted)">' +
+          cfg.label +
+          "</span>" +
+          '<span style="font-size:.68rem;font-family:var(--font-ui);padding:.15rem .5rem;border-radius:4px;background:rgba(99,190,130,.12);color:#6dba8a;border:1px solid rgba(99,190,130,.25)">Event-driven</span>' +
+          "</div>";
         wrap.appendChild(row);
         return;
       }
-      var val = (data[cfg.key] != null) ? Math.max(cfg.min, Math.min(cfg.max, data[cfg.key])) : cfg.min;
+      var val =
+        data[cfg.key] != null
+          ? Math.max(cfg.min, Math.min(cfg.max, data[cfg.key]))
+          : cfg.min;
       row.innerHTML =
         '<div style="display:flex;justify-content:space-between;margin-bottom:.25rem">' +
-          '<span style="font-size:.75rem;color:var(--text-muted)">'+cfg.label+'</span>' +
-          '<span class="srange-val" id="sv_'+cfg.key+'">'+fmtMs(val)+'</span>' +
-        '</div>' +
-        '<input type="range" class="sform-input" id="s_'+cfg.key+'" ' +
-          'min="'+cfg.min+'" max="'+cfg.max+'" step="'+cfg.step+'" value="'+val+'" ' +
-          'style="padding:0;border:none;background:transparent;cursor:pointer">';
+        '<span style="font-size:.75rem;color:var(--text-muted)">' +
+        cfg.label +
+        "</span>" +
+        '<span class="srange-val" id="sv_' +
+        cfg.key +
+        '">' +
+        fmtMs(val) +
+        "</span>" +
+        "</div>" +
+        '<input type="range" class="sform-input" id="s_' +
+        cfg.key +
+        '" ' +
+        'min="' +
+        cfg.min +
+        '" max="' +
+        cfg.max +
+        '" step="' +
+        cfg.step +
+        '" value="' +
+        val +
+        '" ' +
+        'style="padding:0;border:none;background:transparent;cursor:pointer">';
       wrap.appendChild(row);
-      var slider = $('s_'+cfg.key);
-      var valEl  = $('sv_'+cfg.key);
+      var slider = $("s_" + cfg.key);
+      var valEl = $("sv_" + cfg.key);
       if (slider && valEl) {
-        slider.addEventListener('input', function() {
+        slider.addEventListener("input", function () {
           valEl.textContent = fmtMs(parseInt(slider.value, 10));
         });
       }
@@ -2792,180 +5062,308 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
 
   function populate(data) {
     _loaded = data;
-    var fields = ['routerHost','routerPort','routerUser','defaultIf','pingTarget',
-                  'dashUser','topN','topTalkersN','firewallTopN','maxConns','historyMinutes'];
-    fields.forEach(function(f) {
-      var el = $('s_'+f); if (el) el.value = data[f] !== undefined ? data[f] : '';
+    var fields = [
+      "routerHost",
+      "routerPort",
+      "routerUser",
+      "defaultIf",
+      "pingTarget",
+      "topN",
+      "topTalkersN",
+      "firewallTopN",
+      "maxConns",
+      "historyMinutes",
+    ];
+    fields.forEach(function (f) {
+      var el = $("s_" + f);
+      if (el) el.value = data[f] !== undefined ? data[f] : "";
     });
     // Passwords — show placeholder only, never pre-fill with mask
-    var rp = $('s_routerPass'); if (rp) { rp.value = ''; rp.placeholder = data.routerPass ? 'leave blank to keep current' : 'not set'; }
-    var dp = $('s_dashPass');   if (dp) { dp.value = ''; dp.placeholder = data.dashPass   ? 'leave blank to keep current' : 'not set'; }
+    var rp = $("s_routerPass");
+    if (rp) {
+      rp.value = "";
+      rp.placeholder = data.routerPass
+        ? "leave blank to keep current"
+        : "not set";
+    }
     // Booleans
-    ['routerTls','routerTlsInsecure'].forEach(function(f) {
-      var el = $('s_'+f); if (el) el.checked = !!data[f];
+    ["routerTls", "routerTlsInsecure"].forEach(function (f) {
+      var el = $("s_" + f);
+      if (el) el.checked = !!data[f];
     });
     // Page visibility
-    ['pageWireless','pageInterfaces','pageDhcp','pageVpn','pageConnections','pageFirewall','pageLogs','pageBandwidth','pageRouting'].forEach(function(f) {
-      var el = $('s_'+f); if (el) el.checked = data[f] !== false;
+    [
+      "pageWireless",
+      "pageInterfaces",
+      "pageDhcp",
+      "pageVpn",
+      "pageConnections",
+      "pageFirewall",
+      "pageLogs",
+      "pageBandwidth",
+      "pageRouting",
+    ].forEach(function (f) {
+      var el = $("s_" + f);
+      if (el) el.checked = data[f] !== false;
     });
     // Alert thresholds
-    var cpuSlider = $('s_alertCpuThreshold'), cpuVal = $('s_alertCpuThresholdVal');
+    var cpuSlider = $("s_alertCpuThreshold"),
+      cpuVal = $("s_alertCpuThresholdVal");
     if (cpuSlider && data.alertCpuThreshold != null) {
       cpuSlider.value = data.alertCpuThreshold;
-      if (cpuVal) cpuVal.textContent = data.alertCpuThreshold + '%';
-      cpuSlider.addEventListener('input', function() {
-        if (cpuVal) cpuVal.textContent = cpuSlider.value + '%';
+      if (cpuVal) cpuVal.textContent = data.alertCpuThreshold + "%";
+      cpuSlider.addEventListener("input", function () {
+        if (cpuVal) cpuVal.textContent = cpuSlider.value + "%";
       });
     }
-    var pingSlider = $('s_alertPingLoss'), pingVal = $('s_alertPingLossVal');
+    var pingSlider = $("s_alertPingLoss"),
+      pingVal = $("s_alertPingLossVal");
     if (pingSlider && data.alertPingLoss != null) {
       pingSlider.value = data.alertPingLoss;
-      if (pingVal) pingVal.textContent = data.alertPingLoss + '%';
-      pingSlider.addEventListener('input', function() {
-        if (pingVal) pingVal.textContent = pingSlider.value + '%';
+      if (pingVal) pingVal.textContent = data.alertPingLoss + "%";
+      pingSlider.addEventListener("input", function () {
+        if (pingVal) pingVal.textContent = pingSlider.value + "%";
       });
     }
     buildSliders(data);
   }
 
   function loadSettings() {
-    fetch('/api/settings')
-      .then(function(r){ return r.json(); })
-      .then(function(data){ populate(data); })
-      .catch(function(e){ showBanner('err', 'Failed to load settings: '+e); });
+    fetch("/api/settings")
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        populate(data);
+      })
+      .catch(function (e) {
+        showBanner("err", "Failed to load settings: " + e);
+      });
   }
 
   function collectForm() {
     var out = {};
-    ['routerHost','routerUser','defaultIf','pingTarget','dashUser'].forEach(function(f) {
-      var el = $('s_'+f); if (el) out[f] = el.value.trim();
-    });
-    var portEl = $('s_routerPort'); if (portEl) out.routerPort = parseInt(portEl.value, 10);
-    ['topN','topTalkersN','firewallTopN','maxConns','historyMinutes'].forEach(function(f) {
-      var el = $('s_'+f); if (el) out[f] = parseInt(el.value, 10);
+    ["routerHost", "routerUser", "defaultIf", "pingTarget"].forEach(
+      function (f) {
+        var el = $("s_" + f);
+        if (el) out[f] = el.value.trim();
+      },
+    );
+    var portEl = $("s_routerPort");
+    if (portEl) out.routerPort = parseInt(portEl.value, 10);
+    [
+      "topN",
+      "topTalkersN",
+      "firewallTopN",
+      "maxConns",
+      "historyMinutes",
+    ].forEach(function (f) {
+      var el = $("s_" + f);
+      if (el) out[f] = parseInt(el.value, 10);
     });
     // Passwords — only send if user typed something
-    var rpEl = $('s_routerPass'); if (rpEl && rpEl.value) out.routerPass = rpEl.value;
-    var dpEl = $('s_dashPass');   if (dpEl && dpEl.value) out.dashPass   = dpEl.value;
+    var rpEl = $("s_routerPass");
+    if (rpEl && rpEl.value) out.routerPass = rpEl.value;
     // Booleans
-    ['routerTls','routerTlsInsecure'].forEach(function(f) {
-      var el = $('s_'+f); if (el) out[f] = el.checked;
+    ["routerTls", "routerTlsInsecure"].forEach(function (f) {
+      var el = $("s_" + f);
+      if (el) out[f] = el.checked;
     });
-    ['pageWireless','pageInterfaces','pageDhcp','pageVpn','pageConnections','pageFirewall','pageLogs','pageBandwidth','pageRouting'].forEach(function(f) {
-      var el = $('s_'+f); if (el) out[f] = el.checked;
+    [
+      "pageWireless",
+      "pageInterfaces",
+      "pageDhcp",
+      "pageVpn",
+      "pageConnections",
+      "pageFirewall",
+      "pageLogs",
+      "pageBandwidth",
+      "pageRouting",
+    ].forEach(function (f) {
+      var el = $("s_" + f);
+      if (el) out[f] = el.checked;
     });
     // Alert thresholds
-    var cpuEl = $('s_alertCpuThreshold');  if (cpuEl)  out.alertCpuThreshold  = parseInt(cpuEl.value,  10);
-    var pingEl = $('s_alertPingLoss');     if (pingEl) out.alertPingLoss      = parseInt(pingEl.value, 10);
+    var cpuEl = $("s_alertCpuThreshold");
+    if (cpuEl) out.alertCpuThreshold = parseInt(cpuEl.value, 10);
+    var pingEl = $("s_alertPingLoss");
+    if (pingEl) out.alertPingLoss = parseInt(pingEl.value, 10);
     // Poll sliders
-    POLL_SLIDERS.forEach(function(cfg) {
+    POLL_SLIDERS.forEach(function (cfg) {
       if (cfg.streamed) return;
-      var el = $('s_'+cfg.key); if (el) out[cfg.key] = parseInt(el.value, 10);
+      var el = $("s_" + cfg.key);
+      if (el) out[cfg.key] = parseInt(el.value, 10);
     });
     return out;
   }
 
-  if (saveBtn) saveBtn.addEventListener('click', function() {
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving…';
-    var payload = collectForm();
-    fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(data) {
-      saveBtn.disabled = false;
-      saveBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Settings';
-      if (data.ok) {
-        showBanner('ok', '✓ Settings saved');
-        if (routerNotice) routerNotice.style.display = data.requiresRestart ? '' : 'none';
-        loadSettings(); // refresh to get clean state
-      } else {
-        showBanner('err', 'Save failed: '+(data.error||'unknown error'));
-      }
-    })
-    .catch(function(e) {
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Save Settings';
-      showBanner('err', 'Request failed: '+e);
+  if (saveBtn)
+    saveBtn.addEventListener("click", function () {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving…";
+      var payload = collectForm();
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML =
+            '<svg viewBox="0 0 24 24" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Settings';
+          if (data.ok) {
+            showBanner("ok", "✓ Settings saved");
+            if (routerNotice)
+              routerNotice.style.display = data.requiresRestart ? "" : "none";
+            loadSettings(); // refresh to get clean state
+          } else {
+            showBanner(
+              "err",
+              "Save failed: " + (data.error || "unknown error"),
+            );
+          }
+        })
+        .catch(function (e) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save Settings";
+          showBanner("err", "Request failed: " + e);
+        });
     });
-  });
 
-  if (resetBtn) resetBtn.addEventListener('click', function() {
-    if (!confirm('Reset all settings to defaults? This cannot be undone.')) return;
-    fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ _reset: true }),
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(){ showBanner('ok', '✓ Reset to defaults'); loadSettings(); })
-    .catch(function(e){ showBanner('err', 'Reset failed: '+e); });
-  });
+  if (resetBtn)
+    resetBtn.addEventListener("click", function () {
+      if (!confirm("Reset all settings to defaults? This cannot be undone."))
+        return;
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ _reset: true }),
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function () {
+          showBanner("ok", "✓ Reset to defaults");
+          loadSettings();
+        })
+        .catch(function (e) {
+          showBanner("err", "Reset failed: " + e);
+        });
+    });
 
   // Load settings when page becomes active
   // Load settings on every visit to the settings page
-  document.addEventListener('mikrodash:pagechange', function(e) {
-    if (e.detail === 'settings') loadSettings();
+  document.addEventListener("mikrodash:pagechange", function (e) {
+    if (e.detail === "settings") loadSettings();
   });
 })();
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Bandwidth Page
 // ═══════════════════════════════════════════════════════════════════════════
-(function(){
-  var _bwData    = [];
-  var _sortKey   = 'totalMbps';
-  var _sortDir   = -1; // -1 desc, 1 asc
-  var _ifaceSet  = new Set();
-  var _maxBar    = 1;  // for normalising mini-bars
+(function () {
+  var _bwData = [];
+  var _sortKey = "totalMbps";
+  var _sortDir = -1; // -1 desc, 1 asc
+  var _ifaceSet = new Set();
+  var _maxBar = 1; // for normalising mini-bars
 
-  var tbody   = $('bwTbody');
-  var stats   = $('bwStats');
-  var search  = $('bwSearch');
-  var selIface= $('bwIface');
-  var selScope= $('bwScope');
-  var selIpver= $('bwIpver');
-  var selTopN = $('bwTopN');
-  var bwLiveRxNum = $('bwLiveRxNum');
+  var tbody = $("bwTbody");
+  var stats = $("bwStats");
+  var search = $("bwSearch");
+  var selIface = $("bwIface");
+  var selScope = $("bwScope");
+  var selIpver = $("bwIpver");
+  var selTopN = $("bwTopN");
+  var bwLiveRxNum = $("bwLiveRxNum");
   var _bwRafId = null;
   function scheduleRender() {
-    if (!_bwRafId) _bwRafId = requestAnimationFrame(function() { _bwRafId = null; render(); });
+    if (!_bwRafId)
+      _bwRafId = requestAnimationFrame(function () {
+        _bwRafId = null;
+        render();
+      });
   }
-  var bwLiveRxUnit = $('bwLiveRxUnit');
-  var bwLiveTxNum = $('bwLiveTxNum');
-  var bwLiveTxUnit = $('bwLiveTxUnit');
+  var bwLiveRxUnit = $("bwLiveRxUnit");
+  var bwLiveTxNum = $("bwLiveTxNum");
+  var bwLiveTxUnit = $("bwLiveTxUnit");
 
   // ── Compact traffic chart ─────────────────────────────────────────────
   var _bwChart = null;
-  var _bwChartCtx = $('bwTrafficChart');
+  var _bwChartCtx = $("bwTrafficChart");
 
   function _makeBwChart() {
-    if (_bwChart) { _bwChart.destroy(); _bwChart = null; }
+    if (_bwChart) {
+      _bwChart.destroy();
+      _bwChart = null;
+    }
     if (!_bwChartCtx) return;
     _bwChart = new Chart(_bwChartCtx, {
-      type: 'line',
-      data: { labels: [], datasets: [
-        { label:'RX', data:[], borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.08)', borderWidth:1.5, tension:0.3, pointRadius:0, fill:true },
-        { label:'TX', data:[], borderColor:'#34d399', backgroundColor:'rgba(52,211,153,.06)', borderWidth:1.5, tension:0.3, pointRadius:0, fill:true }
-      ]},
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "RX",
+            data: [],
+            borderColor: "#38bdf8",
+            backgroundColor: "rgba(56,189,248,.08)",
+            borderWidth: 1.5,
+            tension: 0.3,
+            pointRadius: 0,
+            fill: true,
+          },
+          {
+            label: "TX",
+            data: [],
+            borderColor: "#34d399",
+            backgroundColor: "rgba(52,211,153,.06)",
+            borderWidth: 1.5,
+            tension: 0.3,
+            pointRadius: 0,
+            fill: true,
+          },
+        ],
+      },
       options: {
-        responsive:true, maintainAspectRatio:false, animation:false,
-        interaction:{ mode:'index', intersect:false },
-        plugins:{ legend:{display:false}, tooltip:{
-          backgroundColor:'rgba(7,9,15,.9)', borderColor:'rgba(99,130,190,.2)', borderWidth:1,
-          titleFont:{family:"'JetBrains Mono',monospace",size:10}, bodyFont:{family:"'JetBrains Mono',monospace",size:10},
-          callbacks:{label:function(ctx){return' '+ctx.dataset.label+': '+fmtMbps(ctx.parsed.y);}}
-        }},
-        scales:{
-          x:{display:false},
-          y:{beginAtZero:true, grid:{color:'rgba(99,130,190,.06)'},
-             ticks:{color:'rgba(148,163,190,.4)',font:{family:"'JetBrains Mono',monospace",size:9},callback:function(v){return fmtMbps(v);},maxTicksLimit:4}}
-        }
-      }
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "rgba(7,9,15,.9)",
+            borderColor: "rgba(99,130,190,.2)",
+            borderWidth: 1,
+            titleFont: { family: "'JetBrains Mono',monospace", size: 10 },
+            bodyFont: { family: "'JetBrains Mono',monospace", size: 10 },
+            callbacks: {
+              label: function (ctx) {
+                return " " + ctx.dataset.label + ": " + fmtMbps(ctx.parsed.y);
+              },
+            },
+          },
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            beginAtZero: true,
+            grid: { color: "rgba(99,130,190,.06)" },
+            ticks: {
+              color: "rgba(148,163,190,.4)",
+              font: { family: "'JetBrains Mono',monospace", size: 9 },
+              callback: function (v) {
+                return fmtMbps(v);
+              },
+              maxTicksLimit: 4,
+            },
+          },
+        },
+      },
     });
   }
 
@@ -2973,80 +5371,101 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   function _syncBwChart() {
     if (!_bwChart) return;
     // Reuse the same allPoints + windowSecs already maintained by the main chart
-    var cutoff = Date.now() - (windowSecs * 1000);
+    var cutoff = Date.now() - windowSecs * 1000;
     var pts = [];
     for (var i = allPoints.length - 1; i >= 0; i--) {
       if (allPoints[i].ts < cutoff) break;
       pts.unshift(allPoints[i]);
     }
-    _bwChart.data.labels = pts.map(function(p){ return new Date(p.ts).toLocaleTimeString(); });
-    _bwChart.data.datasets[0].data = pts.map(function(p){ return p.rx_mbps; });
-    _bwChart.data.datasets[1].data = pts.map(function(p){ return p.tx_mbps; });
-    _bwChart.update('none');
+    _bwChart.data.labels = pts.map(function (p) {
+      return new Date(p.ts).toLocaleTimeString();
+    });
+    _bwChart.data.datasets[0].data = pts.map(function (p) {
+      return p.rx_mbps;
+    });
+    _bwChart.data.datasets[1].data = pts.map(function (p) {
+      return p.tx_mbps;
+    });
+    _bwChart.update("none");
   }
 
   // Update RX/TX stat cards
   function _splitRate(mbps) {
     var n = +mbps || 0;
-    if (n >= 1000) return { num: (n/1000).toFixed(2), unit: 'Gbps' };
-    if (n >= 1)    return { num: n.toFixed(2),         unit: 'Mbps' };
-    if (n >= 0.001) return { num: (n*1000).toFixed(1), unit: 'Kbps' };
-    return { num: '—', unit: '' };
+    if (n >= 1000) return { num: (n / 1000).toFixed(2), unit: "Gbps" };
+    if (n >= 1) return { num: n.toFixed(2), unit: "Mbps" };
+    if (n >= 0.001) return { num: (n * 1000).toFixed(1), unit: "Kbps" };
+    return { num: "—", unit: "" };
   }
   function _updateBwStats(rxMbps, txMbps) {
-    var rx = _splitRate(rxMbps), tx = _splitRate(txMbps);
-    if (bwLiveRxNum)  bwLiveRxNum.textContent  = rx.num;
+    var rx = _splitRate(rxMbps),
+      tx = _splitRate(txMbps);
+    if (bwLiveRxNum) bwLiveRxNum.textContent = rx.num;
     if (bwLiveRxUnit) bwLiveRxUnit.textContent = rx.unit;
-    if (bwLiveTxNum)  bwLiveTxNum.textContent  = tx.num;
+    if (bwLiveTxNum) bwLiveTxNum.textContent = tx.num;
     if (bwLiveTxUnit) bwLiveTxUnit.textContent = tx.unit;
   }
 
   // Hook into traffic:update to keep the compact chart live
-  socket.on('traffic:update', function(sample) {
+  socket.on("traffic:update", function (sample) {
     if (!currentIf || sample.ifName !== currentIf) return;
-    if (pageVisible('bandwidth')) {
+    if (pageVisible("bandwidth")) {
       _updateBwStats(sample.rx_mbps, sample.tx_mbps);
       _syncBwChart();
     }
   });
 
-
-
   function bar(val, max, cls) {
-    var pct = max > 0 ? Math.min(val/max, 1) : 0;
-    var w   = Math.max(Math.round(pct * 60), pct > 0 ? 2 : 0);
-    return '<span class="bw-bar '+cls+'" style="width:'+w+'px"></span>';
+    var pct = max > 0 ? Math.min(val / max, 1) : 0;
+    var w = Math.max(Math.round(pct * 60), pct > 0 ? 2 : 0);
+    return '<span class="bw-bar ' + cls + '" style="width:' + w + 'px"></span>';
   }
 
   function filter(data) {
-    var q     = (search  ? search.value.toLowerCase().trim()  : '');
-    var iface = selIface ? selIface.value : '';
-    var scope = selScope ? selScope.value : '';
-    var ipver = selIpver ? selIpver.value : '';
-    var topN  = selTopN  ? parseInt(selTopN.value, 10) : 10;
+    var q = search ? search.value.toLowerCase().trim() : "";
+    var iface = selIface ? selIface.value : "";
+    var scope = selScope ? selScope.value : "";
+    var ipver = selIpver ? selIpver.value : "";
+    var topN = selTopN ? parseInt(selTopN.value, 10) : 10;
 
-    var out = data.filter(function(r) {
-      if (q && !(
-        r.srcIp.toLowerCase().includes(q) ||
-        r.dstIp.toLowerCase().includes(q) ||
-        (r.name  || '').toLowerCase().includes(q) ||
-        (r.mac   || '').toLowerCase().includes(q) ||
-        (r.org   || '').toLowerCase().includes(q)
-      )) return false;
+    var out = data.filter(function (r) {
+      if (
+        q &&
+        !(
+          r.srcIp.toLowerCase().includes(q) ||
+          r.dstIp.toLowerCase().includes(q) ||
+          (r.name || "").toLowerCase().includes(q) ||
+          (r.mac || "").toLowerCase().includes(q) ||
+          (r.org || "").toLowerCase().includes(q)
+        )
+      )
+        return false;
       if (iface && r.iface !== iface) return false;
-      if (scope === 'lan'  && !r.isLan)  return false;
-      if (scope === 'wan'  &&  r.isLan)  return false;
-      if (ipver === '4'    &&  r.isIpv6) return false;
-      if (ipver === '6'    && !r.isIpv6) return false;
+      if (scope === "lan" && !r.isLan) return false;
+      if (scope === "wan" && r.isLan) return false;
+      if (ipver === "4" && r.isIpv6) return false;
+      if (ipver === "6" && !r.isIpv6) return false;
       return true;
     });
 
     // Sort: _sortDir -1 = descending (highest first), 1 = ascending
-    out.sort(function(a, b) {
-      var av = a[_sortKey] != null ? a[_sortKey] : (typeof a[_sortKey] === 'string' ? '' : 0);
-      var bv = b[_sortKey] != null ? b[_sortKey] : (typeof b[_sortKey] === 'string' ? '' : 0);
-      if (typeof av === 'string' || typeof bv === 'string') {
-        return _sortDir === 1 ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+    out.sort(function (a, b) {
+      var av =
+        a[_sortKey] != null
+          ? a[_sortKey]
+          : typeof a[_sortKey] === "string"
+            ? ""
+            : 0;
+      var bv =
+        b[_sortKey] != null
+          ? b[_sortKey]
+          : typeof b[_sortKey] === "string"
+            ? ""
+            : 0;
+      if (typeof av === "string" || typeof bv === "string") {
+        return _sortDir === 1
+          ? String(av).localeCompare(String(bv))
+          : String(bv).localeCompare(String(av));
       }
       return _sortDir === -1 ? bv - av : av - bv;
     });
@@ -3056,81 +5475,148 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   }
 
   function iso2FlagBw(cc) {
-    if (!cc || cc.length !== 2) return '';
-    var base = 0x1F1E6;
-    return String.fromCodePoint(base + cc.charCodeAt(0) - 65) +
-           String.fromCodePoint(base + cc.charCodeAt(1) - 65);
+    if (!cc || cc.length !== 2) return "";
+    var base = 0x1f1e6;
+    return (
+      String.fromCodePoint(base + cc.charCodeAt(0) - 65) +
+      String.fromCodePoint(base + cc.charCodeAt(1) - 65)
+    );
   }
 
   function render() {
     if (!tbody) return;
     var rows = filter(_bwData);
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="bw-empty">No active bandwidth</td></tr>';
-      if (stats) stats.textContent = '';
+      tbody.innerHTML =
+        '<tr><td colspan="8" class="bw-empty">No active bandwidth</td></tr>';
+      if (stats) stats.textContent = "";
       return;
     }
 
     // Normalise bars to max in current view
-    _maxBar = rows.reduce(function(m, r) { return Math.max(m, r.totalMbps); }, 0.001);
+    _maxBar = rows.reduce(function (m, r) {
+      return Math.max(m, r.totalMbps);
+    }, 0.001);
 
-    tbody.innerHTML = rows.map(function(r) {
-      var flag = r.country ? ('<span class="bw-flag">'+iso2FlagBw(r.country)+'</span>') : '';
-      var dstLabel = r.dstIp ?
-        '<span class="bw-ip">'+esc(r.dstIp)+'</span>' +
-        (r.country ? '<br><span style="font-size:.65rem;color:var(--text-muted)">'+flag+esc(r.country)+(r.city&&r.city.length>1&&r.city!==r.country?', '+esc(r.city):'')+'</span>' : '') : '—';
-      var devLabel =
-        (r.name ? '<div class="bw-name">'+esc(r.name)+'</div>' : '') +
-        '<div class="bw-ip">'+esc(r.srcIp)+'</div>' +
-        (r.mac ? '<div class="bw-mac">'+esc(r.mac)+'</div>' : '');
-      var orgLabel = r.org ? svcBadge(r.org, r.cat) : '—';
-      return '<tr>' +
-        '<td>'+devLabel+'</td>' +
-        '<td>'+dstLabel+'</td>' +
-        '<td class="bw-rate bw-rate-rx">'+fmtMbps(r.rxMbps)+bar(r.rxMbps,_maxBar,'bw-bar-rx')+'</td>' +
-        '<td class="bw-rate bw-rate-tx">'+fmtMbps(r.txMbps)+bar(r.txMbps,_maxBar,'bw-bar-tx')+'</td>' +
-        '<td class="bw-rate bw-rate-total">'+fmtMbps(r.totalMbps)+'</td>' +
-        '<td><span class="bw-ip">'+esc(r.iface||'—')+'</span></td>' +
-        '<td>'+(r.proto?(function(p){
-          var cls=p==='tcp'?'bw-proto-tcp':p==='udp'?'bw-proto-udp':p.indexOf('icmp')!==-1?'bw-proto-icmp':'bw-proto-other';
-          return '<span class="bw-proto '+cls+'">'+esc(p)+'</span>';
-        })(r.proto):'—')+'</td>' +
-        '<td>'+orgLabel+'</td>' +
-        '</tr>';
-    }).join('');
+    tbody.innerHTML = rows
+      .map(function (r) {
+        var flag = r.country
+          ? '<span class="bw-flag">' + iso2FlagBw(r.country) + "</span>"
+          : "";
+        var dstLabel = r.dstIp
+          ? '<span class="bw-ip">' +
+            esc(r.dstIp) +
+            "</span>" +
+            (r.country
+              ? '<br><span style="font-size:.65rem;color:var(--text-muted)">' +
+                flag +
+                esc(r.country) +
+                (r.city && r.city.length > 1 && r.city !== r.country
+                  ? ", " + esc(r.city)
+                  : "") +
+                "</span>"
+              : "")
+          : "—";
+        var devLabel =
+          (r.name ? '<div class="bw-name">' + esc(r.name) + "</div>" : "") +
+          '<div class="bw-ip">' +
+          esc(r.srcIp) +
+          "</div>" +
+          (r.mac ? '<div class="bw-mac">' + esc(r.mac) + "</div>" : "");
+        var orgLabel = r.org ? svcBadge(r.org, r.cat) : "—";
+        return (
+          "<tr>" +
+          "<td>" +
+          devLabel +
+          "</td>" +
+          "<td>" +
+          dstLabel +
+          "</td>" +
+          '<td class="bw-rate bw-rate-rx">' +
+          fmtMbps(r.rxMbps) +
+          bar(r.rxMbps, _maxBar, "bw-bar-rx") +
+          "</td>" +
+          '<td class="bw-rate bw-rate-tx">' +
+          fmtMbps(r.txMbps) +
+          bar(r.txMbps, _maxBar, "bw-bar-tx") +
+          "</td>" +
+          '<td class="bw-rate bw-rate-total">' +
+          fmtMbps(r.totalMbps) +
+          "</td>" +
+          '<td><span class="bw-ip">' +
+          esc(r.iface || "—") +
+          "</span></td>" +
+          "<td>" +
+          (r.proto
+            ? (function (p) {
+                var cls =
+                  p === "tcp"
+                    ? "bw-proto-tcp"
+                    : p === "udp"
+                      ? "bw-proto-udp"
+                      : p.indexOf("icmp") !== -1
+                        ? "bw-proto-icmp"
+                        : "bw-proto-other";
+                return (
+                  '<span class="bw-proto ' + cls + '">' + esc(p) + "</span>"
+                );
+              })(r.proto)
+            : "—") +
+          "</td>" +
+          "<td>" +
+          orgLabel +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
 
-    if (stats) stats.textContent = rows.length+' device'+(rows.length!==1?'s':'');
+    if (stats)
+      stats.textContent =
+        rows.length + " device" + (rows.length !== 1 ? "s" : "");
   }
 
   function updateIfaceSelector(data) {
     // Only tracks the set for filter logic — DOM is managed solely by ifstatus:update
     var seen = new Set();
-    data.forEach(function(r){ if(r.iface) seen.add(r.iface); });
+    data.forEach(function (r) {
+      if (r.iface) seen.add(r.iface);
+    });
     _ifaceSet = seen;
   }
 
   // Sort column headers
   var sortCols = [
-    {id:'bwThDevice',  key:'name'},
-    {id:'bwThDst',     key:'dstIp'},
-    {id:'bwThRx',      key:'rxMbps'},
-    {id:'bwThTx',      key:'txMbps'},
-    {id:'bwThTotal',   key:'totalMbps'},
-    {id:'bwThIface',   key:'iface'},
-    {id:'bwThProto',   key:'proto'},
-    {id:'bwThOrg',     key:'org'},
+    { id: "bwThDevice", key: "name" },
+    { id: "bwThDst", key: "dstIp" },
+    { id: "bwThRx", key: "rxMbps" },
+    { id: "bwThTx", key: "txMbps" },
+    { id: "bwThTotal", key: "totalMbps" },
+    { id: "bwThIface", key: "iface" },
+    { id: "bwThProto", key: "proto" },
+    { id: "bwThOrg", key: "org" },
   ];
   function refreshSortHeaders() {
-    sortCols.forEach(function(c){
-      var el=$(c.id); if(!el) return;
-      el.className = c.key===_sortKey ? (_sortDir===-1?'sort-desc':'sort-asc') : '';
+    sortCols.forEach(function (c) {
+      var el = $(c.id);
+      if (!el) return;
+      el.className =
+        c.key === _sortKey ? (_sortDir === -1 ? "sort-desc" : "sort-asc") : "";
     });
   }
-  sortCols.forEach(function(col) {
-    var th = $(col.id); if (!th) return;
-    th.addEventListener('click', function() {
-      if (_sortKey === col.key) { _sortDir *= -1; }
-      else { _sortKey = col.key; _sortDir = col.key==='name'||col.key==='proto'||col.key==='org' ? 1 : -1; }
+  sortCols.forEach(function (col) {
+    var th = $(col.id);
+    if (!th) return;
+    th.addEventListener("click", function () {
+      if (_sortKey === col.key) {
+        _sortDir *= -1;
+      } else {
+        _sortKey = col.key;
+        _sortDir =
+          col.key === "name" || col.key === "proto" || col.key === "org"
+            ? 1
+            : -1;
+      }
       refreshSortHeaders();
       scheduleRender();
     });
@@ -3138,41 +5624,57 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   refreshSortHeaders(); // apply initial sort indicator on load
 
   // Filter controls
-  [search, selIface, selScope, selIpver, selTopN].forEach(function(el) {
-    if (el) el.addEventListener('input', scheduleRender);
+  [search, selIface, selScope, selIpver, selTopN].forEach(function (el) {
+    if (el) el.addEventListener("input", scheduleRender);
   });
 
   // Seed interface dropdown from ifStatus so all interfaces are always listed
-  socket.on('ifstatus:update', function(data) {
+  socket.on("ifstatus:update", function (data) {
     if (!selIface) return;
     var ifaces = (data.interfaces || [])
-      .filter(function(i){ return i.running && !i.disabled && i.ips && i.ips.length; })
-      .map(function(i){ return i.name; })
+      .filter(function (i) {
+        return i.running && !i.disabled && i.ips && i.ips.length;
+      })
+      .map(function (i) {
+        return i.name;
+      })
       .sort();
     // Check for any change (addition or removal)
-    var existing = Array.from(selIface.options).map(function(o){ return o.value; }).filter(Boolean).sort();
-    if (ifaces.length === existing.length && ifaces.every(function(n,i){ return n === existing[i]; })) return;
+    var existing = Array.from(selIface.options)
+      .map(function (o) {
+        return o.value;
+      })
+      .filter(Boolean)
+      .sort();
+    if (
+      ifaces.length === existing.length &&
+      ifaces.every(function (n, i) {
+        return n === existing[i];
+      })
+    )
+      return;
     // Rebuild only when the interface list actually changed
     var cur = selIface.value;
     selIface.innerHTML = '<option value="">All interfaces</option>';
-    ifaces.forEach(function(name){
-      var o = document.createElement('option');
-      o.value = name; o.textContent = name;
+    ifaces.forEach(function (name) {
+      var o = document.createElement("option");
+      o.value = name;
+      o.textContent = name;
       if (name === cur) o.selected = true;
       selIface.appendChild(o);
     });
   });
 
   // Socket handler
-  socket.on('bandwidth:update', function(data) {
+  socket.on("bandwidth:update", function (data) {
     _bwData = data.devices || [];
     updateIfaceSelector(_bwData);
-    if (pageVisible('bandwidth')) scheduleRender();
+    if (pageVisible("bandwidth")) scheduleRender();
   });
 
   // Re-render when navigating to page (picks up any data that arrived while hidden)
-  document.addEventListener('mikrodash:pagechange', function(e) {
-    if (e.detail === 'bandwidth') {
+  document.addEventListener("mikrodash:pagechange", function (e) {
+    if (e.detail === "bandwidth") {
       if (!_bwChart) _makeBwChart();
       _syncBwChart();
       if (allPoints.length) {
@@ -3187,66 +5689,91 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
 // ═══════════════════════════════════════════════════════════════════════════
 // ── Routing Page ────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
-(function(){
-  var tbody   = $('rtTbody');
-  var search  = $('rtSearch');
-  var selState = $('rtSelState');
-  var selType  = $('rtSelType');
-  var selIpver = $('rtSelIpver');
-  var nb       = $('routingNavBadge');
+(function () {
+  var tbody = $("rtTbody");
+  var search = $("rtSearch");
+  var selState = $("rtSelState");
+  var selType = $("rtSelType");
+  var selIpver = $("rtSelIpver");
+  var nb = $("routingNavBadge");
 
-  var _rtData  = null; // last routing:update payload
-  var _sortKey = 'state';
+  var _rtData = null; // last routing:update payload
+  var _sortKey = "state";
   var _sortDir = 1;
 
   // ── Utilities ─────────────────────────────────────────────────────────────
 
   function fmtUptime(sec) {
-    if (!sec) return '—';
+    if (!sec) return "—";
     var d = Math.floor(sec / 86400);
     var h = Math.floor((sec % 86400) / 3600);
     var m = Math.floor((sec % 3600) / 60);
-    if (d > 0) return d + 'd ' + h + 'h';
-    if (h > 0) return h + 'h ' + m + 'm';
-    return m + 'm';
+    if (d > 0) return d + "d " + h + "h";
+    if (h > 0) return h + "h " + m + "m";
+    return m + "m";
   }
 
   function stateBadge(state, flapping) {
     if (flapping) return '<span class="bgp-state flap">Flapping</span>';
-    return '<span class="bgp-state ' + esc(state) + '">' + esc(state) + '</span>';
+    return (
+      '<span class="bgp-state ' + esc(state) + '">' + esc(state) + "</span>"
+    );
   }
 
   // Inline SVG sparkline from prefix history array
   function sparkSvg(history) {
-    if (!history || history.length < 2) return '<svg width="80" height="20"></svg>';
+    if (!history || history.length < 2)
+      return '<svg width="80" height="20"></svg>';
     var min = Math.min.apply(null, history);
     var max = Math.max.apply(null, history);
     var range = max - min || 1;
-    var w = 80, h = 20, pad = 2;
-    var pts = history.map(function(v, i) {
+    var w = 80,
+      h = 20,
+      pad = 2;
+    var pts = history.map(function (v, i) {
       var x = pad + (i / (history.length - 1)) * (w - pad * 2);
       var y = h - pad - ((v - min) / range) * (h - pad * 2);
-      return x.toFixed(1) + ',' + y.toFixed(1);
+      return x.toFixed(1) + "," + y.toFixed(1);
     });
-    return '<svg class="rt-spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-      '<polyline points="' + pts.join(' ') + '" fill="none" stroke="rgba(167,139,250,.7)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' +
-      '</svg>';
+    return (
+      '<svg class="rt-spark" width="' +
+      w +
+      '" height="' +
+      h +
+      '" viewBox="0 0 ' +
+      w +
+      " " +
+      h +
+      '">' +
+      '<polyline points="' +
+      pts.join(" ") +
+      '" fill="none" stroke="rgba(167,139,250,.7)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+      "</svg>"
+    );
   }
 
   // ── Filter + sort ──────────────────────────────────────────────────────────
 
   function filterPeers(peers) {
-    var q     = search  ? search.value.toLowerCase().trim()  : '';
-    var state = selState ? selState.value : '';
-    var type  = selType  ? selType.value  : '';
-    var ipver = selIpver ? selIpver.value : '';
-    return peers.filter(function(p) {
+    var q = search ? search.value.toLowerCase().trim() : "";
+    var state = selState ? selState.value : "";
+    var type = selType ? selType.value : "";
+    var ipver = selIpver ? selIpver.value : "";
+    return peers.filter(function (p) {
       if (state && p.state !== state) return false;
-      if (type  && p.peerType !== type) return false;
-      if (ipver === '6' && !p.remoteAddr.includes(':')) return false;
-      if (ipver === '4' &&  p.remoteAddr.includes(':')) return false;
+      if (type && p.peerType !== type) return false;
+      if (ipver === "6" && !p.remoteAddr.includes(":")) return false;
+      if (ipver === "4" && p.remoteAddr.includes(":")) return false;
       if (q) {
-        var hay = (p.name + ' ' + p.remoteAddr + ' ' + p.remoteAs + ' ' + p.description).toLowerCase();
+        var hay = (
+          p.name +
+          " " +
+          p.remoteAddr +
+          " " +
+          p.remoteAs +
+          " " +
+          p.description
+        ).toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -3254,23 +5781,46 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   }
 
   function sortPeers(peers) {
-    return peers.slice().sort(function(a, b) {
+    return peers.slice().sort(function (a, b) {
       var av, bv;
-      if (_sortKey === 'name')     { av = a.name;      bv = b.name; }
-      else if (_sortKey === 'addr'){ av = a.remoteAddr; bv = b.remoteAddr; }
-      else if (_sortKey === 'as')  { av = a.remoteAs;   bv = b.remoteAs; }
-      else if (_sortKey === 'state'){
+      if (_sortKey === "name") {
+        av = a.name;
+        bv = b.name;
+      } else if (_sortKey === "addr") {
+        av = a.remoteAddr;
+        bv = b.remoteAddr;
+      } else if (_sortKey === "as") {
+        av = a.remoteAs;
+        bv = b.remoteAs;
+      } else if (_sortKey === "state") {
         // established first, then alphabetical
-        var order = {established:0,active:1,connect:2,opensent:3,openconfirm:4,idle:5};
+        var order = {
+          established: 0,
+          active: 1,
+          connect: 2,
+          opensent: 3,
+          openconfirm: 4,
+          idle: 5,
+        };
         av = order[a.state] !== undefined ? order[a.state] : 9;
         bv = order[b.state] !== undefined ? order[b.state] : 9;
+      } else if (_sortKey === "uptime") {
+        av = a.uptimeSec;
+        bv = b.uptimeSec;
+      } else if (_sortKey === "prefixes") {
+        av = a.prefixes;
+        bv = b.prefixes;
+      } else if (_sortKey === "sent") {
+        av = a.updatesSent;
+        bv = b.updatesSent;
+      } else if (_sortKey === "recv") {
+        av = a.updatesRecv;
+        bv = b.updatesRecv;
+      } else {
+        av = 0;
+        bv = 0;
       }
-      else if (_sortKey === 'uptime')  { av = a.uptimeSec;  bv = b.uptimeSec; }
-      else if (_sortKey === 'prefixes'){ av = a.prefixes;    bv = b.prefixes; }
-      else if (_sortKey === 'sent')    { av = a.updatesSent; bv = b.updatesSent; }
-      else if (_sortKey === 'recv')    { av = a.updatesRecv; bv = b.updatesRecv; }
-      else { av = 0; bv = 0; }
-      if (typeof av === 'string') return _sortDir * av.localeCompare(bv);
+      if (typeof av === "string") return _sortDir * av.localeCompare(bv);
       return _sortDir * (av - bv);
     });
   }
@@ -3279,44 +5829,80 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
 
   var _rtDonut = null;
   var DONUT_COLORS = {
-    static:  'rgba(56,189,248,.85)',
-    dynamic: 'rgba(251,191,36,.85)',
-    bgp:     'rgba(167,139,250,.85)',
-    ospf:    'rgba(251,113,133,.85)',
-    other:   'rgba(99,130,190,.4)',
+    static: "rgba(56,189,248,.85)",
+    dynamic: "rgba(251,191,36,.85)",
+    bgp: "rgba(167,139,250,.85)",
+    ospf: "rgba(251,113,133,.85)",
+    other: "rgba(99,130,190,.4)",
   };
-  var DONUT_LABELS = {static:'Static', dynamic:'Dynamic', bgp:'BGP', ospf:'OSPF', other:'Other'};
+  var DONUT_LABELS = {
+    static: "Static",
+    dynamic: "Dynamic",
+    bgp: "BGP",
+    ospf: "OSPF",
+    other: "Other",
+  };
 
   function updateDonut(rc) {
-    var canvas = $('rtDonutCanvas');
+    var canvas = $("rtDonutCanvas");
     if (!canvas) return;
     // Connected is excluded from the donut — shown in the count grid only
-    var keys    = ['static','dynamic','bgp','ospf'];
-    var known   = keys.reduce(function(a,k){ return a + (rc[k]||0); }, 0)
-                + (rc.connect||0); // include connect in known so Other = unclassified only
-    var other   = Math.max(0, (rc.total||0) - known);
-    var dataKeys = keys.concat(other > 0 ? ['other'] : []);
-    var vals     = keys.map(function(k){ return rc[k]||0; }).concat(other > 0 ? [other] : []);
-    var colors   = dataKeys.map(function(k){ return DONUT_COLORS[k]; });
+    var keys = ["static", "dynamic", "bgp", "ospf"];
+    var known =
+      keys.reduce(function (a, k) {
+        return a + (rc[k] || 0);
+      }, 0) + (rc.connect || 0); // include connect in known so Other = unclassified only
+    var other = Math.max(0, (rc.total || 0) - known);
+    var dataKeys = keys.concat(other > 0 ? ["other"] : []);
+    var vals = keys
+      .map(function (k) {
+        return rc[k] || 0;
+      })
+      .concat(other > 0 ? [other] : []);
+    var colors = dataKeys.map(function (k) {
+      return DONUT_COLORS[k];
+    });
 
     if (!_rtDonut) {
       _rtDonut = new Chart(canvas, {
-        type: 'doughnut',
-        data: { labels: dataKeys.map(function(k){ return DONUT_LABELS[k]||k; }), datasets: [{ data: vals, backgroundColor: colors, borderWidth: 1, borderColor: 'rgba(0,0,0,.15)', hoverOffset: 4 }] },
+        type: "doughnut",
+        data: {
+          labels: dataKeys.map(function (k) {
+            return DONUT_LABELS[k] || k;
+          }),
+          datasets: [
+            {
+              data: vals,
+              backgroundColor: colors,
+              borderWidth: 1,
+              borderColor: "rgba(0,0,0,.15)",
+              hoverOffset: 4,
+            },
+          ],
+        },
         options: {
-          cutout: '68%',
+          cutout: "68%",
           animation: { duration: 400 },
-          plugins: { legend: { display: false }, tooltip: {
-            callbacks: { label: function(ctx) { return ' ' + ctx.label + ': ' + ctx.parsed; } }
-          }},
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return " " + ctx.label + ": " + ctx.parsed;
+                },
+              },
+            },
+          },
           responsive: false,
-        }
+        },
       });
     } else {
-      _rtDonut.data.labels = dataKeys.map(function(k){ return DONUT_LABELS[k]||k; });
+      _rtDonut.data.labels = dataKeys.map(function (k) {
+        return DONUT_LABELS[k] || k;
+      });
       _rtDonut.data.datasets[0].data = vals;
       _rtDonut.data.datasets[0].backgroundColor = colors;
-      _rtDonut.update('none');
+      _rtDonut.update("none");
     }
 
     // Legend removed — data is shown in the count grid to the right of the donut
@@ -3326,18 +5912,24 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
 
   function updateSummary(data) {
     var rc = data.routeCounts || {};
-    var sm = data.summary     || {};
-    var set = function(id, v) { var el = $(id); if (el) el.textContent = v !== undefined ? v : '—'; };
-    set('rtTotal',   rc.total);
-    set('rtConnect', rc.connect);
-    set('rtStatic',  rc.static);
-    set('rtDynamic', rc.dynamic);
-    set('rtBgp',     rc.bgp);
-    set('rtOspf',    rc.ospf);
-    set('rtBgpTotal', sm.total);
-    set('rtBgpEstab', sm.established);
-    set('rtBgpDown',  sm.down);
-    if (nb) { var tot = (data.routeCounts||{}).total; nb.textContent = tot > 0 ? tot : ''; }
+    var sm = data.summary || {};
+    var set = function (id, v) {
+      var el = $(id);
+      if (el) el.textContent = v !== undefined ? v : "—";
+    };
+    set("rtTotal", rc.total);
+    set("rtConnect", rc.connect);
+    set("rtStatic", rc.static);
+    set("rtDynamic", rc.dynamic);
+    set("rtBgp", rc.bgp);
+    set("rtOspf", rc.ospf);
+    set("rtBgpTotal", sm.total);
+    set("rtBgpEstab", sm.established);
+    set("rtBgpDown", sm.down);
+    if (nb) {
+      var tot = (data.routeCounts || {}).total;
+      nb.textContent = tot > 0 ? tot : "";
+    }
     updateDonut(rc);
   }
 
@@ -3349,62 +5941,121 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
     peers = sortPeers(peers);
 
     if (!peers.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:.75rem">No BGP peers' +
-        ((_rtData.peers||[]).length ? ' match current filter' : ' — BGP may not be configured') + '</td></tr>';
+      tbody.innerHTML =
+        '<tr><td colspan="10" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:.75rem">No BGP peers' +
+        ((_rtData.peers || []).length
+          ? " match current filter"
+          : " — BGP may not be configured") +
+        "</td></tr>";
       return;
     }
 
-    tbody.innerHTML = peers.map(function(p) {
-      var typeColors = {upstream:'rgba(56,189,248,.1)', ix:'rgba(167,139,250,.1)', private:'rgba(251,191,36,.1)'};
-      var typeText   = {upstream:'rgba(56,189,248,.8)', ix:'rgba(167,139,250,.8)', private:'rgba(251,191,36,.8)'};
-      var typeLabel  = {upstream:'Upstream', ix:'IX', private:'Private'};
-      var ptype = p.peerType || 'upstream';
-      var typeBadge = '<span style="font-size:.6rem;font-family:var(--font-ui);padding:.1rem .35rem;border-radius:3px;' +
-        'background:' + (typeColors[ptype]||'rgba(99,130,190,.1)') + ';color:' + (typeText[ptype]||'var(--text-muted)') + '">' +
-        (typeLabel[ptype]||ptype) + '</span>';
-      var nameCell = '<div class="rt-peer-name">' + esc(p.name) + ' ' + typeBadge + '</div>' +
-        (p.description ? '<div class="rt-peer-desc">' + esc(p.description) + '</div>' : '');
-      var errCell = p.lastError
-        ? '<span title="' + esc(p.lastError) + '" style="font-size:.65rem;color:rgba(251,113,133,.85);cursor:help;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">⚠ ' + esc(p.lastError) + '</span>'
-        : '<span style="color:var(--text-muted);font-size:.65rem">—</span>';
-      return '<tr>' +
-        '<td>' + nameCell + '</td>' +
-        '<td style="font-family:var(--font-mono);font-size:.7rem">' + esc(p.remoteAddr) + '</td>' +
-        '<td style="font-family:var(--font-mono)">' + (p.remoteAs || '—') + '</td>' +
-        '<td>' + stateBadge(p.state, p.flapping) + '</td>' +
-        '<td style="font-family:var(--font-mono)">' + fmtUptime(p.uptimeSec) + '</td>' +
-        '<td style="font-family:var(--font-mono);text-align:right">' + (p.prefixes || 0).toLocaleString() + '</td>' +
-        '<td style="font-family:var(--font-mono);text-align:right">' + (p.updatesSent || 0).toLocaleString() + '</td>' +
-        '<td style="font-family:var(--font-mono);text-align:right">' + (p.updatesRecv || 0).toLocaleString() + '</td>' +
-        '<td>' + errCell + '</td>' +
-        '<td>' + sparkSvg(p.prefixHistory) + '</td>' +
-        '</tr>';
-    }).join('');
+    tbody.innerHTML = peers
+      .map(function (p) {
+        var typeColors = {
+          upstream: "rgba(56,189,248,.1)",
+          ix: "rgba(167,139,250,.1)",
+          private: "rgba(251,191,36,.1)",
+        };
+        var typeText = {
+          upstream: "rgba(56,189,248,.8)",
+          ix: "rgba(167,139,250,.8)",
+          private: "rgba(251,191,36,.8)",
+        };
+        var typeLabel = { upstream: "Upstream", ix: "IX", private: "Private" };
+        var ptype = p.peerType || "upstream";
+        var typeBadge =
+          '<span style="font-size:.6rem;font-family:var(--font-ui);padding:.1rem .35rem;border-radius:3px;' +
+          "background:" +
+          (typeColors[ptype] || "rgba(99,130,190,.1)") +
+          ";color:" +
+          (typeText[ptype] || "var(--text-muted)") +
+          '">' +
+          (typeLabel[ptype] || ptype) +
+          "</span>";
+        var nameCell =
+          '<div class="rt-peer-name">' +
+          esc(p.name) +
+          " " +
+          typeBadge +
+          "</div>" +
+          (p.description
+            ? '<div class="rt-peer-desc">' + esc(p.description) + "</div>"
+            : "");
+        var errCell = p.lastError
+          ? '<span title="' +
+            esc(p.lastError) +
+            '" style="font-size:.65rem;color:rgba(251,113,133,.85);cursor:help;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">⚠ ' +
+            esc(p.lastError) +
+            "</span>"
+          : '<span style="color:var(--text-muted);font-size:.65rem">—</span>';
+        return (
+          "<tr>" +
+          "<td>" +
+          nameCell +
+          "</td>" +
+          '<td style="font-family:var(--font-mono);font-size:.7rem">' +
+          esc(p.remoteAddr) +
+          "</td>" +
+          '<td style="font-family:var(--font-mono)">' +
+          (p.remoteAs || "—") +
+          "</td>" +
+          "<td>" +
+          stateBadge(p.state, p.flapping) +
+          "</td>" +
+          '<td style="font-family:var(--font-mono)">' +
+          fmtUptime(p.uptimeSec) +
+          "</td>" +
+          '<td style="font-family:var(--font-mono);text-align:right">' +
+          (p.prefixes || 0).toLocaleString() +
+          "</td>" +
+          '<td style="font-family:var(--font-mono);text-align:right">' +
+          (p.updatesSent || 0).toLocaleString() +
+          "</td>" +
+          '<td style="font-family:var(--font-mono);text-align:right">' +
+          (p.updatesRecv || 0).toLocaleString() +
+          "</td>" +
+          "<td>" +
+          errCell +
+          "</td>" +
+          "<td>" +
+          sparkSvg(p.prefixHistory) +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
   }
 
   // ── Sort header wiring ─────────────────────────────────────────────────────
 
   var sortCols = [
-    {id:'rtThName',    key:'name'},
-    {id:'rtThAddr',    key:'addr'},
-    {id:'rtThAs',      key:'as'},
-    {id:'rtThState',   key:'state'},
-    {id:'rtThUptime',  key:'uptime'},
-    {id:'rtThPfx',     key:'prefixes'},
-    {id:'rtThSent',    key:'sent'},
-    {id:'rtThRecv',    key:'recv'},
+    { id: "rtThName", key: "name" },
+    { id: "rtThAddr", key: "addr" },
+    { id: "rtThAs", key: "as" },
+    { id: "rtThState", key: "state" },
+    { id: "rtThUptime", key: "uptime" },
+    { id: "rtThPfx", key: "prefixes" },
+    { id: "rtThSent", key: "sent" },
+    { id: "rtThRecv", key: "recv" },
   ];
   function refreshSortHeaders() {
-    sortCols.forEach(function(c) {
-      var el = $(c.id); if (!el) return;
-      el.className = c.key === _sortKey ? (_sortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+    sortCols.forEach(function (c) {
+      var el = $(c.id);
+      if (!el) return;
+      el.className =
+        c.key === _sortKey ? (_sortDir === 1 ? "sort-asc" : "sort-desc") : "";
     });
   }
-  sortCols.forEach(function(col) {
-    var th = $(col.id); if (!th) return;
-    th.addEventListener('click', function() {
+  sortCols.forEach(function (col) {
+    var th = $(col.id);
+    if (!th) return;
+    th.addEventListener("click", function () {
       if (_sortKey === col.key) _sortDir *= -1;
-      else { _sortKey = col.key; _sortDir = col.key === 'state' || col.key === 'name' ? 1 : -1; }
+      else {
+        _sortKey = col.key;
+        _sortDir = col.key === "state" || col.key === "name" ? 1 : -1;
+      }
       refreshSortHeaders();
       render();
     });
@@ -3413,42 +6064,59 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
 
   // ── Filter controls ────────────────────────────────────────────────────────
 
-  [search, selState, selType, selIpver].forEach(function(el) {
-    if (el) el.addEventListener('input', render);
+  [search, selState, selType, selIpver].forEach(function (el) {
+    if (el) el.addEventListener("input", render);
   });
 
   // ── Routes table ──────────────────────────────────────────────────────────
 
-  var routesTbody   = $('rtRoutesTbody');
-  var routeSearch   = $('rtRouteSearch');
-  var routeSelType  = $('rtRouteSelType');
-  var routeSelActive = $('rtRouteSelActive');
+  var routesTbody = $("rtRoutesTbody");
+  var routeSearch = $("rtRouteSearch");
+  var routeSelType = $("rtRouteSelType");
+  var routeSelActive = $("rtRouteSelActive");
 
-  var _rtRouteSort  = 'dst';
+  var _rtRouteSort = "dst";
   var _rtRouteSortDir = 1;
 
   function filterRoutes(routes) {
-    var q      = routeSearch   ? routeSearch.value.toLowerCase().trim()  : '';
-    var type   = routeSelType  ? routeSelType.value   : '';
-    var active = routeSelActive ? routeSelActive.value : '';
-    return routes.filter(function(r) {
-      if (type   && r.type !== type)          return false;
-      if (active && !r.active)                return false;
-      if (q && !(r.dst + ' ' + r.gateway + ' ' + r.comment).toLowerCase().includes(q)) return false;
+    var q = routeSearch ? routeSearch.value.toLowerCase().trim() : "";
+    var type = routeSelType ? routeSelType.value : "";
+    var active = routeSelActive ? routeSelActive.value : "";
+    return routes.filter(function (r) {
+      if (type && r.type !== type) return false;
+      if (active && !r.active) return false;
+      if (
+        q &&
+        !(r.dst + " " + r.gateway + " " + r.comment).toLowerCase().includes(q)
+      )
+        return false;
       return true;
     });
   }
 
   function sortRoutes(routes) {
-    return routes.slice().sort(function(a, b) {
+    return routes.slice().sort(function (a, b) {
       var av, bv;
-      if      (_rtRouteSort === 'dst')      { av = a.dst;      bv = b.dst; }
-      else if (_rtRouteSort === 'gateway')  { av = a.gateway;  bv = b.gateway; }
-      else if (_rtRouteSort === 'distance') { av = a.distance; bv = b.distance; }
-      else if (_rtRouteSort === 'active')   { av = a.active?0:1; bv = b.active?0:1; }
-      else if (_rtRouteSort === 'type')     { av = a.type;     bv = b.type; }
-      else { av = 0; bv = 0; }
-      if (typeof av === 'string') return _rtRouteSortDir * av.localeCompare(bv);
+      if (_rtRouteSort === "dst") {
+        av = a.dst;
+        bv = b.dst;
+      } else if (_rtRouteSort === "gateway") {
+        av = a.gateway;
+        bv = b.gateway;
+      } else if (_rtRouteSort === "distance") {
+        av = a.distance;
+        bv = b.distance;
+      } else if (_rtRouteSort === "active") {
+        av = a.active ? 0 : 1;
+        bv = b.active ? 0 : 1;
+      } else if (_rtRouteSort === "type") {
+        av = a.type;
+        bv = b.type;
+      } else {
+        av = 0;
+        bv = 0;
+      }
+      if (typeof av === "string") return _rtRouteSortDir * av.localeCompare(bv);
       return _rtRouteSortDir * (av - bv);
     });
   }
@@ -3458,156 +6126,236 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
     var routes = filterRoutes(_rtData.routes || []);
     routes = sortRoutes(routes);
     if (!routes.length) {
-      routesTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:.75rem">No routes' +
-        ((_rtData.routes||[]).length ? ' match current filter' : '') + '</td></tr>';
+      routesTbody.innerHTML =
+        '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:.75rem">No routes' +
+        ((_rtData.routes || []).length ? " match current filter" : "") +
+        "</td></tr>";
       return;
     }
-    routesTbody.innerHTML = routes.map(function(r) {
-      var activeCell = r.active
-        ? '<span style="color:rgba(52,211,153,.9);font-size:.7rem">&#10003; Active</span>'
-        : '<span style="color:var(--text-muted);font-size:.7rem">—</span>';
-      var typeCell = r.type === 'static'
-        ? '<span style="font-size:.65rem;padding:.1rem .35rem;border-radius:3px;background:rgba(56,189,248,.1);color:rgba(56,189,248,.8)">Static</span>'
-        : '<span style="font-size:.65rem;padding:.1rem .35rem;border-radius:3px;background:rgba(251,191,36,.1);color:rgba(251,191,36,.8)">' +
-          (r.protocol !== r.type ? esc(r.protocol.toUpperCase()) : 'Dynamic') + '</span>';
-      return '<tr>' +
-        '<td style="font-family:var(--font-mono);font-size:.72rem">' + esc(r.dst || '—') + '</td>' +
-        '<td style="font-family:var(--font-mono);font-size:.72rem">' + esc(r.gateway || '—') + '</td>' +
-        '<td style="font-family:var(--font-mono);text-align:right">' + r.distance + '</td>' +
-        '<td>' + activeCell + '</td>' +
-        '<td>' + typeCell + '</td>' +
-        '<td style="font-size:.7rem;color:var(--text-muted)">' + esc(r.comment || '—') + '</td>' +
-        '</tr>';
-    }).join('');
+    routesTbody.innerHTML = routes
+      .map(function (r) {
+        var activeCell = r.active
+          ? '<span style="color:rgba(52,211,153,.9);font-size:.7rem">&#10003; Active</span>'
+          : '<span style="color:var(--text-muted);font-size:.7rem">—</span>';
+        var typeCell =
+          r.type === "static"
+            ? '<span style="font-size:.65rem;padding:.1rem .35rem;border-radius:3px;background:rgba(56,189,248,.1);color:rgba(56,189,248,.8)">Static</span>'
+            : '<span style="font-size:.65rem;padding:.1rem .35rem;border-radius:3px;background:rgba(251,191,36,.1);color:rgba(251,191,36,.8)">' +
+              (r.protocol !== r.type
+                ? esc(r.protocol.toUpperCase())
+                : "Dynamic") +
+              "</span>";
+        return (
+          "<tr>" +
+          '<td style="font-family:var(--font-mono);font-size:.72rem">' +
+          esc(r.dst || "—") +
+          "</td>" +
+          '<td style="font-family:var(--font-mono);font-size:.72rem">' +
+          esc(r.gateway || "—") +
+          "</td>" +
+          '<td style="font-family:var(--font-mono);text-align:right">' +
+          r.distance +
+          "</td>" +
+          "<td>" +
+          activeCell +
+          "</td>" +
+          "<td>" +
+          typeCell +
+          "</td>" +
+          '<td style="font-size:.7rem;color:var(--text-muted)">' +
+          esc(r.comment || "—") +
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
   }
 
   // Sort headers for routes table
   var routeSortCols = [
-    {id:'rtRThDst',     key:'dst'},
-    {id:'rtRThGw',      key:'gateway'},
-    {id:'rtRThDist',    key:'distance'},
-    {id:'rtRThActive',  key:'active'},
-    {id:'rtRThType',    key:'type'},
+    { id: "rtRThDst", key: "dst" },
+    { id: "rtRThGw", key: "gateway" },
+    { id: "rtRThDist", key: "distance" },
+    { id: "rtRThActive", key: "active" },
+    { id: "rtRThType", key: "type" },
   ];
   function refreshRouteSortHeaders() {
-    routeSortCols.forEach(function(c) {
-      var el = $(c.id); if (!el) return;
-      el.className = c.key === _rtRouteSort ? (_rtRouteSortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+    routeSortCols.forEach(function (c) {
+      var el = $(c.id);
+      if (!el) return;
+      el.className =
+        c.key === _rtRouteSort
+          ? _rtRouteSortDir === 1
+            ? "sort-asc"
+            : "sort-desc"
+          : "";
     });
   }
-  routeSortCols.forEach(function(col) {
-    var th = $(col.id); if (!th) return;
-    th.addEventListener('click', function() {
+  routeSortCols.forEach(function (col) {
+    var th = $(col.id);
+    if (!th) return;
+    th.addEventListener("click", function () {
       if (_rtRouteSort === col.key) _rtRouteSortDir *= -1;
-      else { _rtRouteSort = col.key; _rtRouteSortDir = col.key === 'active' || col.key === 'distance' ? 1 : 1; }
+      else {
+        _rtRouteSort = col.key;
+        _rtRouteSortDir =
+          col.key === "active" || col.key === "distance" ? 1 : 1;
+      }
       refreshRouteSortHeaders();
       renderRoutes();
     });
   });
   refreshRouteSortHeaders();
 
-  [routeSearch, routeSelType, routeSelActive].forEach(function(el) {
-    if (el) el.addEventListener('input', renderRoutes);
+  [routeSearch, routeSelType, routeSelActive].forEach(function (el) {
+    if (el) el.addEventListener("input", renderRoutes);
   });
 
   // ── Socket handler ─────────────────────────────────────────────────────────
 
-  socket.on('routing:update', function(data) {
+  socket.on("routing:update", function (data) {
     _rtData = data;
     updateSummary(data);
-    if (pageVisible('routing')) { render(); renderRoutes(); }
+    if (pageVisible("routing")) {
+      render();
+      renderRoutes();
+    }
   });
 
-  document.addEventListener('mikrodash:pagechange', function(e) {
-    if (e.detail === 'routing') { render(); renderRoutes(); }
+  document.addEventListener("mikrodash:pagechange", function (e) {
+    if (e.detail === "routing") {
+      render();
+      renderRoutes();
+    }
   });
-
 })();
 
 // ── BGP Notifications ───────────────────────────────────────────────────────
-(function(){
-  var _bgpPrevState   = {};  // key -> state string
-  var _bgpPrevPfx     = {};  // key -> prefix count
-  var _bgpFlapAlerted = {};  // key -> ts
-  var BGP_PFX_THRESH  = 0.2; // 20% prefix change triggers alert
-  var BGP_COOLDOWN    = 120000; // 2 min between repeat alerts
+(function () {
+  var _bgpPrevState = {}; // key -> state string
+  var _bgpPrevPfx = {}; // key -> prefix count
+  var _bgpFlapAlerted = {}; // key -> ts
+  var BGP_PFX_THRESH = 0.2; // 20% prefix change triggers alert
+  var BGP_COOLDOWN = 120000; // 2 min between repeat alerts
 
-  socket.on('routing:update', function(data) {
+  socket.on("routing:update", function (data) {
     var now = Date.now();
-    (data.peers || []).forEach(function(p) {
-      var key   = p.key;
+    (data.peers || []).forEach(function (p) {
+      var key = p.key;
       var state = p.state;
-      var prev  = _bgpPrevState[key];
+      var prev = _bgpPrevState[key];
 
       // Peer down / up
-      if (prev === 'established' && state !== 'established') {
-        sendNotif('BGP Peer Down', p.name + ' (' + p.remoteAddr + ') → ' + state, 'bgp-down-' + key);
-      } else if (prev !== undefined && prev !== 'established' && state === 'established') {
-        sendNotif('BGP Peer Up', p.name + ' (' + p.remoteAddr + ') is established', 'bgp-up-' + key);
+      if (prev === "established" && state !== "established") {
+        sendNotif(
+          "BGP Peer Down",
+          p.name + " (" + p.remoteAddr + ") → " + state,
+          "bgp-down-" + key,
+        );
+      } else if (
+        prev !== undefined &&
+        prev !== "established" &&
+        state === "established"
+      ) {
+        sendNotif(
+          "BGP Peer Up",
+          p.name + " (" + p.remoteAddr + ") is established",
+          "bgp-up-" + key,
+        );
       }
       _bgpPrevState[key] = state;
 
       // Prefix count change beyond threshold (only when established)
-      if (state === 'established' && _bgpPrevPfx[key] !== undefined) {
+      if (state === "established" && _bgpPrevPfx[key] !== undefined) {
         var old = _bgpPrevPfx[key];
         if (old > 0) {
           var change = Math.abs(p.prefixes - old) / old;
-          if (change >= BGP_PFX_THRESH && (now - (_bgpFlapAlerted['pfx-' + key] || 0)) > BGP_COOLDOWN) {
-            var dir = p.prefixes > old ? '+' : '-';
-            sendNotif('BGP Prefix Change', p.name + ': ' + dir + Math.abs(p.prefixes - old) + ' prefixes (' + old + ' → ' + p.prefixes + ')', 'bgp-pfx-' + key);
-            _bgpFlapAlerted['pfx-' + key] = now;
+          if (
+            change >= BGP_PFX_THRESH &&
+            now - (_bgpFlapAlerted["pfx-" + key] || 0) > BGP_COOLDOWN
+          ) {
+            var dir = p.prefixes > old ? "+" : "-";
+            sendNotif(
+              "BGP Prefix Change",
+              p.name +
+                ": " +
+                dir +
+                Math.abs(p.prefixes - old) +
+                " prefixes (" +
+                old +
+                " → " +
+                p.prefixes +
+                ")",
+              "bgp-pfx-" + key,
+            );
+            _bgpFlapAlerted["pfx-" + key] = now;
           }
         }
       }
-      if (state === 'established') _bgpPrevPfx[key] = p.prefixes;
+      if (state === "established") _bgpPrevPfx[key] = p.prefixes;
 
       // Session flapping
-      if (p.flapping && (now - (_bgpFlapAlerted['flap-' + key] || 0)) > BGP_COOLDOWN) {
-        sendNotif('BGP Session Flapping', p.name + ' (' + p.remoteAddr + ') is flapping', 'bgp-flap-' + key);
-        _bgpFlapAlerted['flap-' + key] = now;
+      if (
+        p.flapping &&
+        now - (_bgpFlapAlerted["flap-" + key] || 0) > BGP_COOLDOWN
+      ) {
+        sendNotif(
+          "BGP Session Flapping",
+          p.name + " (" + p.remoteAddr + ") is flapping",
+          "bgp-flap-" + key,
+        );
+        _bgpFlapAlerted["flap-" + key] = now;
       }
 
       // Hold timer / keepalive issues — flag when hold-time is very short or keepalive is 0
-      if (state === 'established' && p.holdTime > 0 && p.holdTime < 9 && p.keepalive === 0) {
-        if ((now - (_bgpFlapAlerted['hold-' + key] || 0)) > BGP_COOLDOWN) {
-          sendNotif('BGP Hold Timer Warning', p.name + ': hold-time=' + p.holdTime + 's, keepalive=0', 'bgp-hold-' + key);
-          _bgpFlapAlerted['hold-' + key] = now;
+      if (
+        state === "established" &&
+        p.holdTime > 0 &&
+        p.holdTime < 9 &&
+        p.keepalive === 0
+      ) {
+        if (now - (_bgpFlapAlerted["hold-" + key] || 0) > BGP_COOLDOWN) {
+          sendNotif(
+            "BGP Hold Timer Warning",
+            p.name + ": hold-time=" + p.holdTime + "s, keepalive=0",
+            "bgp-hold-" + key,
+          );
+          _bgpFlapAlerted["hold-" + key] = now;
         }
       }
     });
   });
 })();
 
-
 // ═══════════════════════════════════════════════════════════════════════════
 // ── Router Management ───────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════
-(function(){
-  var _routers  = [];   // array of router objects (passwords masked)
-  var _activeRouterId = '';
+(function () {
+  var _routers = []; // array of router objects (passwords masked)
+  var _activeRouterId = "";
 
-  var sel       = $('routerSelect');
-  var tbody     = $('rtrTbody');
-  var addBtn    = $('rtrAddBtn');
-  var modalBg   = $('rtrModalBg');
-  var modalTitle= $('rtrModalTitle');
-  var modalId   = $('rtrModalId');
-  var modalLabel= $('rtrModalLabel');
-  var modalHost = $('rtrModalHost');
-  var modalPort = $('rtrModalPort');
-  var modalUser = $('rtrModalUser');
-  var modalPass = $('rtrModalPass');
-  var modalIf   = $('rtrModalIf');
-  var modalPing = $('rtrModalPing');
-  var modalTls  = $('rtrModalTls');
-  var modalTlsI = $('rtrModalTlsInsecure');
-  var testBtn   = $('rtrModalTestBtn');
-  var testResult= $('rtrTestResult');
-  var cancelBtn = $('rtrModalCancelBtn');
-  var closeBtn  = $('rtrModalCloseBtn');
-  var saveBtn   = $('rtrModalSaveBtn');
-  var switchOvl = $('rtrSwitchingOverlay');
-  var switchLbl = $('rtrSwitchingLabel');
+  var sel = $("routerSelect");
+  var tbody = $("rtrTbody");
+  var addBtn = $("rtrAddBtn");
+  var modalBg = $("rtrModalBg");
+  var modalTitle = $("rtrModalTitle");
+  var modalId = $("rtrModalId");
+  var modalLabel = $("rtrModalLabel");
+  var modalHost = $("rtrModalHost");
+  var modalPort = $("rtrModalPort");
+  var modalUser = $("rtrModalUser");
+  var modalPass = $("rtrModalPass");
+  var modalIf = $("rtrModalIf");
+  var modalPing = $("rtrModalPing");
+  var modalTls = $("rtrModalTls");
+  var modalTlsI = $("rtrModalTlsInsecure");
+  var testBtn = $("rtrModalTestBtn");
+  var testResult = $("rtrTestResult");
+  var cancelBtn = $("rtrModalCancelBtn");
+  var closeBtn = $("rtrModalCloseBtn");
+  var saveBtn = $("rtrModalSaveBtn");
+  var switchOvl = $("rtrSwitchingOverlay");
+  var switchLbl = $("rtrSwitchingLabel");
 
   // Keep _activeRouterId in sync for the system:update board name patch
   window._activeRouterId = _activeRouterId;
@@ -3616,34 +6364,35 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   function rebuildSelect() {
     if (!sel) return;
     var prev = sel.value;
-    sel.innerHTML = '';
+    sel.innerHTML = "";
     // Also rebuild the mobile nav select
-    var navSel = $('navRouterSelect');
-    if (navSel) navSel.innerHTML = '';
-    _routers.forEach(function(r) {
-      var label = (r.label || r.host || '?').replace(/\s*[·•·•].*$/, '').trim();
-      var opt = document.createElement('option');
+    var navSel = $("navRouterSelect");
+    if (navSel) navSel.innerHTML = "";
+    _routers.forEach(function (r) {
+      var label = (r.label || r.host || "?").replace(/\s*[·•·•].*$/, "").trim();
+      var opt = document.createElement("option");
       opt.value = r.id;
-      opt.text  = label;
+      opt.text = label;
       sel.appendChild(opt);
       // Mirror into mobile nav select
       if (navSel) {
-        var navOpt = document.createElement('option');
+        var navOpt = document.createElement("option");
         navOpt.value = r.id;
-        navOpt.text  = label;
+        navOpt.text = label;
         navSel.appendChild(navOpt);
       }
     });
     // Only show the topbar select when there are multiple routers
-    var wrap = $('routerSelectWrap');
-    if (wrap) wrap.style.display = _routers.length > 1 ? 'flex' : 'none';
-    if (_routers.length <= 1 && wrap) wrap.style.display = 'flex'; // always show so label is visible
-    sel.value = _activeRouterId || prev || (sel.options[0] && sel.options[0].value);
+    var wrap = $("routerSelectWrap");
+    if (wrap) wrap.style.display = _routers.length > 1 ? "flex" : "none";
+    if (_routers.length <= 1 && wrap) wrap.style.display = "flex"; // always show so label is visible
+    sel.value =
+      _activeRouterId || prev || (sel.options[0] && sel.options[0].value);
     if (navSel) navSel.value = sel.value;
   }
 
   if (sel) {
-    sel.addEventListener('change', function() {
+    sel.addEventListener("change", function () {
       var newId = sel.value;
       if (!newId || newId === _activeRouterId) return;
       activateRouter(newId);
@@ -3651,9 +6400,9 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   }
 
   // Mobile nav select — mirrors the topbar select
-  var navSel = $('navRouterSelect');
+  var navSel = $("navRouterSelect");
   if (navSel) {
-    navSel.addEventListener('change', function() {
+    navSel.addEventListener("change", function () {
       var newId = navSel.value;
       if (!newId || newId === _activeRouterId) return;
       activateRouter(newId);
@@ -3664,63 +6413,97 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   function renderTable() {
     if (!tbody) return;
     if (!_routers.length) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:1.2rem;color:var(--text-muted);font-size:.73rem">No routers configured. Click Add Router to get started.</td></tr>';
+      tbody.innerHTML =
+        '<tr><td colspan="4" style="text-align:center;padding:1.2rem;color:var(--text-muted);font-size:.73rem">No routers configured. Click Add Router to get started.</td></tr>';
       return;
     }
-    tbody.innerHTML = _routers.map(function(r) {
-      var isActive = r.id === _activeRouterId;
-      var activeBadge = isActive ? '<span class="rtr-active-badge">Active</span>' : '';
+    tbody.innerHTML = _routers
+      .map(function (r) {
+        var isActive = r.id === _activeRouterId;
+        var activeBadge = isActive
+          ? '<span class="rtr-active-badge">Active</span>'
+          : "";
 
-      var delBtn = !isActive
-        ? '<button class="sbtn sbtn-danger" style="padding:.25rem .6rem;font-size:.68rem" data-rtr-id="'+esc(r.id)+'" data-rtr-label="'+esc(r.label)+'" data-rtr-action="delete" title="Delete">&#128465;</button>'
-        : '';
-      var tlsBadge = r.tls
-        ? '<span style="font-size:.6rem;padding:.1rem .4rem;border-radius:4px;background:rgba(52,211,153,.1);color:rgba(52,211,153,.9);border:1px solid rgba(52,211,153,.2)">TLS</span>'
-        : '<span style="font-size:.6rem;padding:.1rem .4rem;border-radius:4px;background:rgba(251,191,36,.1);color:rgba(251,191,36,.8);border:1px solid rgba(251,191,36,.2)">Unencrypted</span>';
-      var certNote = r.tlsInsecure ? ' <span style="font-size:.6rem;color:var(--text-muted)">self-signed</span>' : '';
-      return '<tr>' +
-        '<td><div style="font-weight:600;font-size:.76rem">'+esc(r.label)+'</div>' + activeBadge + '</td>' +
-        '<td><span class="rtr-host">'+esc(r.host)+':'+r.port+'</span></td>' +
-        '<td>'+tlsBadge+certNote+'</td>' +
-        '<td style="text-align:right;white-space:nowrap;display:flex;gap:.3rem;justify-content:flex-end">' +
-          '<button class="sbtn sbtn-ghost" style="padding:.25rem .6rem;font-size:.68rem" data-rtr-id="'+esc(r.id)+'" data-rtr-action="edit">Edit</button>' +
+        var delBtn = !isActive
+          ? '<button class="sbtn sbtn-danger" style="padding:.25rem .6rem;font-size:.68rem" data-rtr-id="' +
+            esc(r.id) +
+            '" data-rtr-label="' +
+            esc(r.label) +
+            '" data-rtr-action="delete" title="Delete">&#128465;</button>'
+          : "";
+        var tlsBadge = r.tls
+          ? '<span style="font-size:.6rem;padding:.1rem .4rem;border-radius:4px;background:rgba(52,211,153,.1);color:rgba(52,211,153,.9);border:1px solid rgba(52,211,153,.2)">TLS</span>'
+          : '<span style="font-size:.6rem;padding:.1rem .4rem;border-radius:4px;background:rgba(251,191,36,.1);color:rgba(251,191,36,.8);border:1px solid rgba(251,191,36,.2)">Unencrypted</span>';
+        var certNote = r.tlsInsecure
+          ? ' <span style="font-size:.6rem;color:var(--text-muted)">self-signed</span>'
+          : "";
+        return (
+          "<tr>" +
+          '<td><div style="font-weight:600;font-size:.76rem">' +
+          esc(r.label) +
+          "</div>" +
+          activeBadge +
+          "</td>" +
+          '<td><span class="rtr-host">' +
+          esc(r.host) +
+          ":" +
+          r.port +
+          "</span></td>" +
+          "<td>" +
+          tlsBadge +
+          certNote +
+          "</td>" +
+          '<td style="text-align:right;white-space:nowrap;display:flex;gap:.3rem;justify-content:flex-end">' +
+          '<button class="sbtn sbtn-ghost" style="padding:.25rem .6rem;font-size:.68rem" data-rtr-id="' +
+          esc(r.id) +
+          '" data-rtr-action="edit">Edit</button>' +
           delBtn +
-        '</td>' +
-        '</tr>';
-    }).join('');
+          "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
   }
 
   // ── Socket events ─────────────────────────────────────────────────────────
-  socket.on('routers:update', function(list) {
+  socket.on("routers:update", function (list) {
     _routers = list || [];
     window._activeRouterId = _activeRouterId;
     rebuildSelect();
     renderTable();
   });
 
-  socket.on('router:active', function(data) {
-    _activeRouterId = data.activeId || '';
+  socket.on("router:active", function (data) {
+    _activeRouterId = data.activeId || "";
     window._activeRouterId = _activeRouterId;
     if (sel) sel.value = _activeRouterId;
-    var navSel2 = $('navRouterSelect');
+    var navSel2 = $("navRouterSelect");
     if (navSel2) navSel2.value = _activeRouterId;
     renderTable();
   });
 
-  socket.on('router:switching', function(data) {
-    if (switchOvl) switchOvl.classList.add('open');
-    if (switchLbl) switchLbl.textContent = 'Switching to ' + esc(data.label || 'router') + '…';
+  socket.on("router:switching", function (data) {
+    if (switchOvl) switchOvl.classList.add("open");
+    if (switchLbl)
+      switchLbl.textContent =
+        "Switching to " + esc(data.label || "router") + "…";
     // Reset traffic chart state immediately so stale data from the old router
     // doesn't linger. The new traffic:history event will re-initialise the chart
     // once the new router connects and sendInitialState() runs.
-    currentIf = '';
-    allPoints  = [];
-    if (chart) { chart.data.labels = []; chart.data.datasets[0].data = []; chart.data.datasets[1].data = []; chart.update('none'); }
+    currentIf = "";
+    allPoints = [];
+    if (chart) {
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      chart.data.datasets[1].data = [];
+      chart.update("none");
+    }
     // Reset stale timer and clear the chart while switching.
-    staleTimers['trafficCard'] = Date.now();
-    var tc = $('trafficCard'); if (tc) tc.classList.remove('is-stale');
-    if (liveRx) liveRx.textContent = '—';
-    if (liveTx) liveTx.textContent = '—';
+    staleTimers["trafficCard"] = Date.now();
+    var tc = $("trafficCard");
+    if (tc) tc.classList.remove("is-stale");
+    if (liveRx) liveRx.textContent = "—";
+    if (liveTx) liveTx.textContent = "—";
     // Clear cached-data guards so the lan:overview and talkers handlers
     // don't skip incoming payloads from the new router.
     lastLanData = null;
@@ -3728,17 +6511,17 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   });
 
   // Update the status dot and hide switching overlay on ros:status
-  socket.on('ros:status', function(data) {
+  socket.on("ros:status", function (data) {
     // Update both the topbar dot and the mobile nav dot
-    ['rtrStatusDot', 'navRtrStatusDot'].forEach(function(id) {
+    ["rtrStatusDot", "navRtrStatusDot"].forEach(function (id) {
       var dot = $(id);
       if (dot) {
-        if (data.connected) dot.classList.remove('offline');
-        else                dot.classList.add('offline');
+        if (data.connected) dot.classList.remove("offline");
+        else dot.classList.add("offline");
       }
     });
     if (data.connected && switchOvl) {
-      switchOvl.classList.remove('open');
+      switchOvl.classList.remove("open");
     }
   });
 
@@ -3746,171 +6529,215 @@ var MAP_URL = '/vendor/world-atlas/countries-110m.json';
   function openModal(router) {
     if (!modalBg) return;
     var isEdit = !!router;
-    modalTitle.textContent = isEdit ? 'Edit Router' : 'Add Router';
-    modalId.value    = router ? router.id        : '';
-    modalLabel.value = router ? router.label     : '';
-    modalHost.value  = router ? router.host      : '';
-    modalPort.value  = router ? router.port      : '8729';
-    modalUser.value  = router ? router.username  : 'admin';
-    modalPass.value  = '';
-    if (isEdit) modalPass.placeholder = 'leave blank to keep current';
-    else        modalPass.placeholder = '';
-    modalIf.value    = router ? router.defaultIf  : 'ether1';
-    modalPing.value  = router ? router.pingTarget : '1.1.1.1';
-    if (modalTls)  modalTls.checked  = router ? !!router.tls         : true;
+    modalTitle.textContent = isEdit ? "Edit Router" : "Add Router";
+    modalId.value = router ? router.id : "";
+    modalLabel.value = router ? router.label : "";
+    modalHost.value = router ? router.host : "";
+    modalPort.value = router ? router.port : "8729";
+    modalUser.value = router ? router.username : "admin";
+    modalPass.value = "";
+    if (isEdit) modalPass.placeholder = "leave blank to keep current";
+    else modalPass.placeholder = "";
+    modalIf.value = router ? router.defaultIf : "ether1";
+    modalPing.value = router ? router.pingTarget : "1.1.1.1";
+    if (modalTls) modalTls.checked = router ? !!router.tls : true;
     if (modalTlsI) modalTlsI.checked = router ? !!router.tlsInsecure : false;
     hideTestResult();
-    modalBg.classList.add('open');
+    modalBg.classList.add("open");
     if (modalHost) modalHost.focus();
   }
 
   function closeModal() {
-    if (modalBg) modalBg.classList.remove('open');
+    if (modalBg) modalBg.classList.remove("open");
     hideTestResult();
   }
 
   function showTestResult(ok, msg) {
     if (!testResult) return;
-    testResult.style.display = '';
-    testResult.className = 'rtr-test-result ' + (ok ? 'ok' : 'err');
+    testResult.style.display = "";
+    testResult.className = "rtr-test-result " + (ok ? "ok" : "err");
     testResult.textContent = msg;
   }
 
   function hideTestResult() {
-    if (testResult) testResult.style.display = 'none';
+    if (testResult) testResult.style.display = "none";
   }
 
   function collectModal() {
     return {
-      id:          modalId  ? modalId.value.trim()   : '',
-      label:       modalLabel? modalLabel.value.trim(): '',
-      host:        modalHost ? modalHost.value.trim() : '',
-      port:        modalPort ? parseInt(modalPort.value, 10) : 8729,
-      username:    modalUser ? modalUser.value.trim() : 'admin',
-      password:    modalPass ? modalPass.value        : '',
-      defaultIf:   modalIf  ? modalIf.value.trim()   : 'ether1',
-      pingTarget:  modalPing? modalPing.value.trim()  : '1.1.1.1',
-      tls:         modalTls ? modalTls.checked        : true,
-      tlsInsecure: modalTlsI? modalTlsI.checked       : false,
+      id: modalId ? modalId.value.trim() : "",
+      label: modalLabel ? modalLabel.value.trim() : "",
+      host: modalHost ? modalHost.value.trim() : "",
+      port: modalPort ? parseInt(modalPort.value, 10) : 8729,
+      username: modalUser ? modalUser.value.trim() : "admin",
+      password: modalPass ? modalPass.value : "",
+      defaultIf: modalIf ? modalIf.value.trim() : "ether1",
+      pingTarget: modalPing ? modalPing.value.trim() : "1.1.1.1",
+      tls: modalTls ? modalTls.checked : true,
+      tlsInsecure: modalTlsI ? modalTlsI.checked : false,
     };
   }
 
   // ── Test connection ────────────────────────────────────────────────────────
   if (testBtn) {
-    testBtn.addEventListener('click', function() {
+    testBtn.addEventListener("click", function () {
       var data = collectModal();
-      if (!data.host) { showTestResult(false, 'Host is required'); return; }
+      if (!data.host) {
+        showTestResult(false, "Host is required");
+        return;
+      }
       testBtn.disabled = true;
-      testBtn.textContent = 'Testing…';
+      testBtn.textContent = "Testing…";
       hideTestResult();
-      fetch('/api/routers/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      fetch("/api/routers/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       })
-        .then(function(r){ return r.json(); })
-        .then(function(r) {
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (r) {
           if (r.ok) {
-            var msg = '✓ Connected' + (r.boardName ? ' — ' + r.boardName : '');
+            var msg = "✓ Connected" + (r.boardName ? " — " + r.boardName : "");
             showTestResult(true, msg);
             // Auto-fill label if empty and we got a board name
             if (r.boardName && modalLabel && !modalLabel.value.trim()) {
               modalLabel.value = r.boardName;
             }
           } else {
-            showTestResult(false, '✗ ' + (r.error || 'Connection failed'));
+            showTestResult(false, "✗ " + (r.error || "Connection failed"));
           }
         })
-        .catch(function(e) { showTestResult(false, '✗ Request failed: ' + e); })
-        .finally(function() {
+        .catch(function (e) {
+          showTestResult(false, "✗ Request failed: " + e);
+        })
+        .finally(function () {
           testBtn.disabled = false;
-          testBtn.textContent = 'Test Connection';
+          testBtn.textContent = "Test Connection";
         });
     });
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
   if (saveBtn) {
-    saveBtn.addEventListener('click', function() {
+    saveBtn.addEventListener("click", function () {
       var data = collectModal();
-      if (!data.host) { showTestResult(false, 'Host is required'); return; }
+      if (!data.host) {
+        showTestResult(false, "Host is required");
+        return;
+      }
 
       saveBtn.disabled = true;
-      var url    = data.id ? '/api/routers/' + encodeURIComponent(data.id) : '/api/routers';
-      var method = data.id ? 'PUT' : 'POST';
+      var url = data.id
+        ? "/api/routers/" + encodeURIComponent(data.id)
+        : "/api/routers";
+      var method = data.id ? "PUT" : "POST";
 
       fetch(url, {
         method: method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       })
-        .then(function(r){ return r.json(); })
-        .then(function(r) {
-          if (r.ok) { closeModal(); }
-          else      { showTestResult(false, r.error || 'Save failed'); }
+        .then(function (r) {
+          return r.json();
         })
-        .catch(function(e) { showTestResult(false, 'Request failed: ' + e); })
-        .finally(function() { saveBtn.disabled = false; });
+        .then(function (r) {
+          if (r.ok) {
+            closeModal();
+          } else {
+            showTestResult(false, r.error || "Save failed");
+          }
+        })
+        .catch(function (e) {
+          showTestResult(false, "Request failed: " + e);
+        })
+        .finally(function () {
+          saveBtn.disabled = false;
+        });
     });
   }
 
   function activateRouter(id) {
-    var router = _routers.find(function(r){ return r.id === id; });
+    var router = _routers.find(function (r) {
+      return r.id === id;
+    });
     if (!router) return;
-    if (switchOvl) switchOvl.classList.add('open');
-    if (switchLbl) switchLbl.textContent = 'Switching to ' + router.label + '…';
-    fetch('/api/routers/' + encodeURIComponent(id) + '/activate', { method: 'POST' })
-      .then(function(r){ return r.json(); })
-      .catch(function(e){
-        if (switchOvl) switchOvl.classList.remove('open');
-        alert('Switch failed: ' + e);
+    if (switchOvl) switchOvl.classList.add("open");
+    if (switchLbl) switchLbl.textContent = "Switching to " + router.label + "…";
+    fetch("/api/routers/" + encodeURIComponent(id) + "/activate", {
+      method: "POST",
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .catch(function (e) {
+        if (switchOvl) switchOvl.classList.remove("open");
+        alert("Switch failed: " + e);
       });
   }
 
   // ── Table event delegation (replaces inline onclick) ─────────────────────
   if (tbody) {
-    tbody.addEventListener('click', function(e) {
-      var btn = e.target.closest('[data-rtr-action]');
+    tbody.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-rtr-action]");
       if (!btn) return;
       var action = btn.dataset.rtrAction;
-      var id     = btn.dataset.rtrId;
-      if (action === 'edit')   { var r = _routers.find(function(x){ return x.id===id; }); if(r) openModal(r); }
-      if (action === 'delete') {
+      var id = btn.dataset.rtrId;
+      if (action === "edit") {
+        var r = _routers.find(function (x) {
+          return x.id === id;
+        });
+        if (r) openModal(r);
+      }
+      if (action === "delete") {
         var label = btn.dataset.rtrLabel || id;
-        if (!confirm('Delete router "' + label + '"? This cannot be undone.')) return;
-        fetch('/api/routers/' + encodeURIComponent(id), { method: 'DELETE' })
-          .then(function(r){ return r.json(); })
-          .then(function(r){ if (!r.ok) alert('Delete failed: ' + (r.error||'Unknown error')); })
-          .catch(function(e){ alert('Request failed: '+e); });
+        if (!confirm('Delete router "' + label + '"? This cannot be undone.'))
+          return;
+        fetch("/api/routers/" + encodeURIComponent(id), { method: "DELETE" })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (r) {
+            if (!r.ok) alert("Delete failed: " + (r.error || "Unknown error"));
+          })
+          .catch(function (e) {
+            alert("Request failed: " + e);
+          });
       }
     });
   }
 
   // ── Auto-fill port when TLS toggle changes ──────────────────────────────
   if (modalTls) {
-    modalTls.addEventListener('change', function() {
+    modalTls.addEventListener("change", function () {
       if (!modalPort) return;
       var currentPort = parseInt(modalPort.value, 10);
       // Only auto-fill if the port is still one of the two standard ports —
       // don't overwrite a custom port the user has manually entered.
       if (currentPort === 8729 || currentPort === 8728 || !currentPort) {
-        modalPort.value = modalTls.checked ? '8729' : '8728';
+        modalPort.value = modalTls.checked ? "8729" : "8728";
       }
     });
   }
 
   // ── Event wiring ──────────────────────────────────────────────────────────
-  if (addBtn)    addBtn.addEventListener('click',   function(){ openModal(null); });
-  if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-  if (closeBtn)  closeBtn.addEventListener('click',  closeModal);
-  if (modalBg)   modalBg.addEventListener('click',   function(e){ if (e.target === modalBg) closeModal(); });
+  if (addBtn)
+    addBtn.addEventListener("click", function () {
+      openModal(null);
+    });
+  if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
+  if (closeBtn) closeBtn.addEventListener("click", closeModal);
+  if (modalBg)
+    modalBg.addEventListener("click", function (e) {
+      if (e.target === modalBg) closeModal();
+    });
 
   // Dismiss switching overlay on Escape
-  document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape') {
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
       closeModal();
-      if (switchOvl) switchOvl.classList.remove('open');
+      if (switchOvl) switchOvl.classList.remove("open");
     }
   });
-
 })();
